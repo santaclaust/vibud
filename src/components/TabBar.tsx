@@ -59,7 +59,7 @@ export default function TabBar({ navigation, currentRoute, onCenterPress, showMe
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    height: 58,
+    height: 55,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
@@ -91,13 +91,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centerButtonInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 43,
+    height: 43,
+    borderRadius: 22,
     backgroundColor: '#4A90E2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -20,
+    marginTop: 0,
     shadowColor: '#4A90E2',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -105,6 +105,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   centerIcon: {
-    fontSize: 22,
+    fontSize: 20,
   },
 });

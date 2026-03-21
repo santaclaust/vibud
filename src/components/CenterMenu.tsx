@@ -32,7 +32,7 @@ function FloatingButton({ option, isVisible, onPress }: { option: MenuOption; is
   useEffect(() => {
     if (isVisible) {
       progress.value = withTiming(1, {
-        duration: 600,
+        duration: 700,
         easing: Easing.out(Easing.back(0.5))
       });
 
@@ -96,18 +96,23 @@ export default function CenterMenu({ visible, onClose, onSelect }: { visible: bo
 
   if (!visible && !showButtons) return null;
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const TAB_BAR_HEIGHT = 75;
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const HEADER_HEIGHT = 44; // 顶部按钮栏高度
+  const TAB_BAR_HEIGHT = 55; // Tab Bar高度
+  const BLUR_TOP = HEADER_HEIGHT;
+  const BLUR_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      {/* 毛玻璃背景层 - Tab Bar以上区域 */}
+      {/* 毛玻璃背景层 - 不包含顶部44px和底部Tab Bar */}
       <View style={styles.blurContainer} pointerEvents="none">
-        <BlurView
-          style={[styles.blurView, { height: SCREEN_HEIGHT - TAB_BAR_HEIGHT }]}
-          tint="light"
-          intensity={50}
-        />
+        <View style={[styles.blurWrapper, { top: BLUR_TOP, height: BLUR_HEIGHT }]}>
+          <BlurView
+            style={styles.blurView}
+            tint="light"
+            intensity={80}
+          />
+        </View>
       </View>
       
       {/* 点击空白关闭 */}
@@ -136,11 +141,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 998,
   },
+  blurWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
   blurView: {
-    width: '100%',
+    flex: 1,
   },
   clickArea: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
   },
   menuContainer: {

@@ -1,44 +1,72 @@
-// Pexels API 服务
+// Pexels API 服务 - 按五大类别严格过滤
 const PEXELS_API_KEY = 'YFOPEfx9IhazmwzyOcLOhLZ1a5QloVDSZE9SCSFGZonS6dbrTpFhRW5C';
 const PEXELS_BASE_URL = 'https://api.pexels.com/v1';
 
-// 根据心情分类映射搜索关键词（情感化、避免人像、印象派/蜡笔风格）
+// 已显示过的图片URL缓存（避免重复）
+const shownImages = new Set<string>();
+let imageCounter = 0;
+
+// 五大类别固定关键词映射
 const categoryKeywords: Record<string, string[]> = {
-  'all': ['soft pastel abstract', 'gentle texture', 'dreamy watercolor', 'impressionist sky'],
-  '内观': ['meditation atmosphere', 'inner peace', 'calm mindfulness', 'soft shadow', 'solitude mood'],
-  '感悟': ['warm sunrise feelings', 'soft light hope', 'tender growth', 'grateful heart', 'gentle morning'],
-  '陪伴': ['soft warmth', 'gentle connection', 'caring heart', 'loving kindness', 'cozy feeling'],
-  '远眺': ['vast horizon soft', 'distant mountains misty', 'ethereal sky', 'dreamy landscape', 'soft horizon'],
-  '隐喻': ['impressionist painting', 'soft abstract art', 'blurred beauty', 'pastel tones', 'ethereal art'],
+  '内观': ['peaceful', 'calm', 'serene', 'quiet', 'mind', 'heart'],
+  '感悟': ['growth', 'light', 'hope', 'journey', 'time'],
+  '陪伴': ['warm', 'love', 'gentle', 'soft', 'cozy'],
+  '远眺': ['mountain', 'peak', 'sky', 'cloud', 'horizon'],
+  '隐喻': ['nature', 'tree', 'ocean', 'wave', 'star'],
+  'all': ['peaceful', 'calm', 'nature', 'beautiful'],
 };
 
-// 根据签语文本提取关键词搜索
+// 严格排除人像参数
+const EXCLUDE_PERSON = '&exclude=people,person,face,portrait,selfie,model,woman,man,girl,boy,baby,child,adult,teenager,couple,group,team,family,friends,celebrity,actor,actress,fashion,beauty,makeup,hairstyle,glamour,pose,body,skin,eye,mouth,nose';
+
+// 判断图片是否可能包含人脸
+function isLikelyPerson(photo: any): boolean {
+  const photographer = (photo.photographer || '').toLowerCase();
+  
+  // 时尚/人像摄影师
+  const personPhotographers = ['fashion', 'portrait', 'model', 'studio', 'beauty'];
+  if (personPhotographers.some(p => photographer.includes(p))) {
+    return true;
+  }
+  
+  // 尺寸过滤：排除1:1比例且尺寸<3000px的头像类图
+  if (photo.width && photo.height) {
+    const ratio = photo.width / photo.height;
+    if (ratio > 0.8 && ratio < 1.2 && photo.width < 3000) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// 随机打乱数组
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// 根据签语文本和类别搜索图片
 export async function searchImageByQuote(quoteText: string, category: string = 'all'): Promise<string | null> {
   try {
-    // 从签语文本中提取关键词（取前几个关键词）
-    const textKeywords = extractKeywordsFromQuote(quoteText);
+    // 获取类别关键词
+    const catKeywords = categoryKeywords[category] || categoryKeywords['all'];
     
-    // 合并心情分类的关键词
-    const categoryWords = categoryKeywords[category] || categoryKeywords['all'];
-    
-    // 组合搜索词：签语关键词 + 风格 + 避免人像和器官特写
+    // 搜索词组合：[签语关键词] + landscape/nature/scenery + high resolution + no people
     const searchWords = [
-      ...textKeywords.slice(0, 2),
-      ...categoryWords.slice(0, 2),
-      'soft', 'pastel', 'dreamy', 'abstract', 'texture'
-    ];
+      ...catKeywords,
+      'landscape', 'nature', 'scenery', 'high resolution', 'no people', 'minimalist', 'aesthetic'
+    ].join(' ');
     
-    // 排除人物和器官特写
-    const excludeTerms = '&exclude=people,person,face,eye,hand,body,skin,human';
-    
-    const keyword = searchWords.join(' ');
-    
+    // 获取80张以上以便筛选
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(keyword)}&per_page=25&orientation=portrait&size=large`,
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=80&orientation=portrait&size=large${EXCLUDE_PERSON}`,
       {
-        headers: {
-          Authorization: PEXELS_API_KEY,
-        },
+        headers: { Authorization: PEXELS_API_KEY },
       }
     );
 
@@ -50,19 +78,42 @@ export async function searchImageByQuote(quoteText: string, category: string = '
     const data = await response.json();
     
     if (data.photos && data.photos.length > 0) {
-      // 选择高像素图片
-      const validPhotos = data.photos.filter((photo: any) => {
-        return (photo.width || 0) >= 2000 && (photo.height || 0) >= 2000;
+      // 严格过滤人像
+      const filteredPhotos = data.photos.filter((photo: any) => {
+        const url = photo.src?.large2x || photo.src?.large;
+        // 排除已显示过的
+        if (url && shownImages.has(url)) return false;
+        // 排除可能的人物照
+        if (isLikelyPerson(photo)) return false;
+        return true;
       });
       
-      if (validPhotos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * validPhotos.length);
-        return validPhotos[randomIndex].src.large2x || validPhotos[randomIndex].src.large;
+      // 随机打乱
+      const shuffled = shuffleArray(filteredPhotos.length > 0 ? filteredPhotos : data.photos);
+      
+      // 选择第一张未显示过的
+      for (const photo of shuffled) {
+        const url = photo.src?.large2x || photo.src?.large;
+        if (url && !shownImages.has(url)) {
+          shownImages.add(url);
+          imageCounter++;
+          if (imageCounter > 100) {
+            shownImages.clear();
+            imageCounter = 0;
+          }
+          return url;
+        }
       }
       
-      // 回退
-      const randomIndex = Math.floor(Math.random() * data.photos.length);
-      return data.photos[randomIndex].src.large2x || data.photos[randomIndex].src.large;
+      // 都显示过了就清空重新开始
+      shownImages.clear();
+      imageCounter = 0;
+      const randomPhoto = shuffled[0];
+      const url = randomPhoto.src?.large2x || randomPhoto.src?.large;
+      if (url) {
+        shownImages.add(url);
+        return url;
+      }
     }
     
     return null;
@@ -72,69 +123,18 @@ export async function searchImageByQuote(quoteText: string, category: string = '
   }
 }
 
-// 从签语文本提取关键词
-function extractKeywordsFromQuote(text: string): string[] {
-  // 定义情感关键词库
-  const emotionWords: Record<string, string[]> = {
-    '温暖': ['warm', 'gentle', 'soft'],
-    '阳光': ['sunshine', 'sunlight', 'golden'],
-    '希望': ['hope', 'light', 'bright'],
-    '爱': ['love', 'heart', 'caring'],
-    '陪伴': ['together', 'companion', 'support'],
-    '力量': ['strength', 'power', 'brave'],
-    '平静': ['peace', 'calm', 'serene'],
-    '成长': ['growth', 'bloom', 'flourish'],
-    '未来': ['future', 'horizon', 'distant'],
-    '过去': ['memory', 'nostalgia', 'past'],
-    '眼泪': ['tear', 'rain', 'emotion'],
-    '笑': ['smile', 'joy', 'happy'],
-    '星星': ['star', 'night', 'twinkle'],
-    '月亮': ['moon', 'night', 'peaceful'],
-    '大海': ['sea', 'ocean', 'vast'],
-    '山': ['mountain', 'peak', 'majestic'],
-    '花': ['flower', 'bloom', 'petal'],
-    '树': ['tree', 'nature', 'green'],
-    '水': ['water', 'flow', 'peace'],
-    '风': ['wind', 'breeze', 'free'],
-    '云': ['cloud', 'sky', 'dreamy'],
-    '光': ['light', 'glow', 'shine'],
-    '梦': ['dream', 'fantasy', 'wish'],
-    '心': ['heart', 'soul', 'feeling'],
-    '自己': ['self', 'inner', 'soul'],
-    '时间': ['time', 'moment', 'memory'],
-    '路': ['path', 'journey', 'road'],
-  };
-  
-  const keywords: string[] = [];
-  
-  // 遍历情感词库，匹配签语文本
-  for (const [chinese, english] of Object.entries(emotionWords)) {
-    if (text.includes(chinese)) {
-      keywords.push(...english);
-    }
-  }
-  
-  // 如果没有匹配，返回默认情感词
-  if (keywords.length === 0) {
-    keywords.push('soft', 'gentle', 'emotional', 'peaceful');
-  }
-  
-  return [...new Set(keywords)]; // 去重
-}
+// 随机获取图片
 export async function getRandomImage(category: string = 'all'): Promise<string | null> {
   try {
-    const keywords = categoryKeywords[category] || categoryKeywords['all'];
-    const keyword = keywords[Math.floor(Math.random() * keywords.length)];
+    const catKeywords = categoryKeywords[category] || categoryKeywords['all'];
+    const searchWords = [
+      ...catKeywords,
+      'landscape', 'nature', 'high resolution', 'no people', 'minimalist'
+    ].join(' ');
     
-    // 添加参数避免人像和器官，高像素，印象派/蜡笔风格
-    const excludeTerms = '&exclude=people,person,face,eye,hand,body,skin,human,portrait,selfie';
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(keyword)}&per_page=20&orientation=portrait&size=large${excludeTerms}`, 
-      {
-        headers: {
-          Authorization: PEXELS_API_KEY,
-        },
-      }
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=80&orientation=portrait&size=large${EXCLUDE_PERSON}`,
+      { headers: { Authorization: PEXELS_API_KEY } }
     );
 
     if (!response.ok) {
@@ -145,24 +145,25 @@ export async function getRandomImage(category: string = 'all'): Promise<string |
     const data = await response.json();
     
     if (data.photos && data.photos.length > 0) {
-      // 过滤掉包含人物的图片，选择高像素的
-      const validPhotos = data.photos.filter((photo: any) => {
-        const width = photo.width || 0;
-        const height = photo.height || 0;
-        // 选择像素较高的图片
-        return width >= 2000 && height >= 2000;
+      const filteredPhotos = data.photos.filter((photo: any) => {
+        const url = photo.src?.large2x || photo.src?.large;
+        if (url && shownImages.has(url)) return false;
+        if (isLikelyPerson(photo)) return false;
+        return true;
       });
       
-      if (validPhotos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * validPhotos.length);
-        return validPhotos[randomIndex].src.large2x || validPhotos[randomIndex].src.large;
+      const shuffled = shuffleArray(filteredPhotos.length > 0 ? filteredPhotos : data.photos);
+      
+      for (const photo of shuffled) {
+        const url = photo.src?.large2x || photo.src?.large;
+        if (url && !shownImages.has(url)) {
+          shownImages.add(url);
+          return url;
+        }
       }
       
-      // 如果没有符合条件的，回退到任意图片
-      if (data.photos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * data.photos.length);
-        return data.photos[randomIndex].src.large2x || data.photos[randomIndex].src.large;
-      }
+      const randomPhoto = shuffled[0];
+      return randomPhoto.src?.large2x || randomPhoto.src?.large;
     }
     
     return null;
@@ -175,29 +176,25 @@ export async function getRandomImage(category: string = 'all'): Promise<string |
 // 预加载多张图片
 export async function preloadImages(category: string = 'all', count: number = 5): Promise<string[]> {
   try {
-    const keywords = categoryKeywords[category] || categoryKeywords['all'];
-    const keyword = keywords[Math.floor(Math.random() * keywords.length)];
+    const catKeywords = categoryKeywords[category] || categoryKeywords['all'];
+    const searchWords = [...catKeywords, 'landscape', 'nature', 'high resolution'].join(' ');
     
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(keyword)}&per_page=${count}&orientation=portrait&size=large`,
-      {
-        headers: {
-          Authorization: PEXELS_API_KEY,
-        },
-      }
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=${count * 3}&orientation=portrait&size=large${EXCLUDE_PERSON}`,
+      { headers: { Authorization: PEXELS_API_KEY } }
     );
 
-    if (!response.ok) {
-      return [];
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
     
     if (data.photos && data.photos.length > 0) {
-      return data.photos
-        .filter((photo: any) => (photo.width || 0) >= 1500)
-        .map((photo: any) => photo.src.large2x || photo.src.large)
-        .slice(0, count);
+      const filtered = data.photos.filter((photo: any) => !isLikelyPerson(photo));
+      const shuffled = shuffleArray(filtered.length > 0 ? filtered : data.photos);
+      return shuffled
+        .slice(0, count)
+        .map((photo: any) => photo.src?.large2x || photo.src?.large)
+        .filter(Boolean);
     }
     
     return [];
