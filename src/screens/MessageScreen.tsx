@@ -1,39 +1,35 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
 
-export default function MessageScreen({ navigation }: any) {
+export default function MessageScreen({ navigation, colors }: any) {
+  const c = colors || { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#999999', border: '#F0F0F0' };
+  
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>消息</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+        <Text style={[styles.title, { color: c.text }]}>消息</Text>
       </View>
       
       <View style={styles.emptyState}>
         <Text style={styles.emptyIcon}>💬</Text>
-        <Text style={styles.emptyText}>暂无新消息</Text>
-        <Text style={styles.emptySubtext}>倾诉后你会收到回复通知</Text>
+        <Text style={[styles.emptyText, { color: c.text }]}>暂无新消息</Text>
+        <Text style={[styles.emptySubtext, { color: c.textSecondary }]}>倾诉后你会收到回复通知</Text>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9F9F9',
-  },
+  container: { flex: 1 },
   header: {
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
   },
   emptyState: {
     flex: 1,
@@ -41,17 +37,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 100,
   },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-  },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
+  emptyText: { fontSize: 16, marginBottom: 8 },
+  emptySubtext: { fontSize: 14 },
 });

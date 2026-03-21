@@ -34,31 +34,37 @@ const getThemeIcon = (mode: ThemeMode): string => {
   }
 };
 
-export default function HomeScreen({ navigation, menuVisible }: any) {
+export default function HomeScreen({ navigation, menuVisible, colors: propsColors, themeMode: propsThemeMode, onThemeChange }: any) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentQuote, setCurrentQuote] = useState<Quote>(getTodayQuote());
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageSource, setImageSource] = useState<ImageSource>('pexels');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [showImageMenu, setShowImageMenu] = useState(false);
+  
+  // 优先使用props的themeMode，否则使用本地状态
+  const [localThemeMode, setLocalThemeMode] = useState<ThemeMode>('light');
+  const currentThemeMode = propsThemeMode || localThemeMode;
+  const isDark = currentThemeMode === 'dark';
   const [isLongPressing, setIsLongPressing] = useState(false);
+  
+  // 优先使用props传递的colors，否则自己计算
+  const defaultColors = { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF' };
+  const colors = propsColors || defaultColors;
   
   // 手势相关
   const lastY = useRef(0);
   const lastX = useRef(0);
   const isSwiping = useRef(false);
   
-  const systemColorScheme = useColorScheme();
-  const isDark = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
-  const colors = isDark ? darkTheme : lightTheme;
-  
   const tagSize = useMemo(() => calculateTagSize(), []);
   
   // 初始化
   useEffect(() => {
-    themeManager.init().then(setThemeMode);
-  }, []);
+    if (!propsThemeMode) {
+      themeManager.init().then(setLocalThemeMode);
+    }
+  }, [propsThemeMode]);
 
   // 加载图片
   const loadImage = useCallback(async (quote: Quote, category: string) => {
@@ -244,7 +250,10 @@ export default function HomeScreen({ navigation, menuVisible }: any) {
   // 切换主题
   const handleToggleTheme = async () => {
     const newMode = await themeManager.cycle();
-    setThemeMode(newMode);
+    setLocalThemeMode(newMode);
+    if (onThemeChange) {
+      onThemeChange(newMode);
+    }
   };
 
   // 初始加载
@@ -286,7 +295,7 @@ export default function HomeScreen({ navigation, menuVisible }: any) {
         </View>
         
         <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.card }]} onPress={handleToggleTheme}>
-          <Text style={styles.themeButtonText}>{getThemeIcon(themeMode)}</Text>
+          <Text style={styles.themeButtonText}>{getThemeIcon(currentThemeMode)}</Text>
         </TouchableOpacity>
       </View>
 

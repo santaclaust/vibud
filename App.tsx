@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, SafeAreaView, StatusBar, useColorScheme } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, StatusBar, useColorScheme } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import ConfessionScreen from './src/screens/ConfessionScreen';
 import MessageScreen from './src/screens/MessageScreen';
@@ -35,15 +35,17 @@ export default function App() {
   };
 
   const renderScreen = () => {
+    const screenProps = { navigation: { navigate: (n: ScreenName) => setCurrentRoute(n) }, colors, themeMode, onThemeChange: setThemeMode };
+    
     switch (currentRoute) {
-      case 'Home': return <HomeScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} menuVisible={menuVisible} />;
-      case 'Confession': return <ConfessionScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n), goBack: () => setCurrentRoute('Home') }} />;
-      case 'Message': return <MessageScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} />;
-      case 'Profile': return <ProfileScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} />;
-      case 'Community': return <CommunityScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} />;
-      case 'TreeHole': return <TreeHoleScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n), goBack: () => setCurrentRoute('Home') }} />;
-      case 'TimeMachine': return <TimeMachineScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n), goBack: () => setCurrentRoute('Home') }} />;
-      default: return <HomeScreen navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} menuVisible={menuVisible} />;
+      case 'Home': return <HomeScreen {...screenProps} menuVisible={menuVisible} />;
+      case 'Confession': return <ConfessionScreen {...screenProps} goBack={() => setCurrentRoute('Home')} />;
+      case 'Message': return <MessageScreen {...screenProps} />;
+      case 'Profile': return <ProfileScreen {...screenProps} />;
+      case 'Community': return <CommunityScreen {...screenProps} />;
+      case 'TreeHole': return <TreeHoleScreen {...screenProps} goBack={() => setCurrentRoute('Home')} />;
+      case 'TimeMachine': return <TimeMachineScreen {...screenProps} goBack={() => setCurrentRoute('Home')} />;
+      default: return <HomeScreen {...screenProps} menuVisible={menuVisible} />;
     }
   };
 
@@ -55,7 +57,12 @@ export default function App() {
       <View style={styles.content}>{renderScreen()}</View>
       {showTabBar && (
         <View style={styles.tabBarContainer}>
-          <TabBar navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} currentRoute={currentRoute} onCenterPress={handleCenterPress} />
+          <TabBar 
+            navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} 
+            currentRoute={currentRoute} 
+            onCenterPress={handleCenterPress}
+            colors={colors}
+          />
         </View>
       )}
       <CenterMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onSelect={handleMenuSelect} />

@@ -16,9 +16,31 @@ const tabs: TabItem[] = [
   { name: 'Profile', icon: '👤', label: '我的' },
 ];
 
-export default function TabBar({ navigation, currentRoute, onCenterPress, showMenu }: any) {
+interface TabBarProps {
+  navigation: any;
+  currentRoute: string;
+  onCenterPress: () => void;
+}
+
+interface TabBarProps {
+  navigation: any;
+  currentRoute: string;
+  onCenterPress: () => void;
+  colors?: any;
+}
+
+export default function TabBar({ navigation, currentRoute, onCenterPress, colors }: TabBarProps) {
+  // 默认主题色
+  const defaultColors = {
+    surface: '#FFFFFF',
+    border: '#F0F0F0',
+    textSecondary: '#999999',
+    primary: '#4A90E2',
+  };
+  const themeColors = colors || defaultColors;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
       {tabs.map((tab) => {
         const isActive = currentRoute === tab.name;
         const isCenter = tab.isCenter;
@@ -43,10 +65,10 @@ export default function TabBar({ navigation, currentRoute, onCenterPress, showMe
             style={styles.tabItem}
             onPress={() => navigation.navigate(tab.name)}
           >
-            <Text style={[styles.tabIcon, isActive && styles.tabIconActive]}>
+            <Text style={[styles.tabIcon, isActive && styles.tabIconActive, { color: isActive ? themeColors.primary : themeColors.textSecondary }]}>
               {tab.icon}
             </Text>
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+            <Text style={[styles.tabLabel, { color: isActive ? themeColors.primary : themeColors.textSecondary }]}>
               {tab.label}
             </Text>
           </TouchableOpacity>
@@ -60,14 +82,14 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     height: 55,
-    backgroundColor: '#FFF',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingBottom: 8,
   },
   tabItem: {
     flex: 1,
+    height: 47,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -76,14 +98,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   tabIconActive: {
-    // 可以添加激活态样式
   },
   tabLabel: {
     fontSize: 11,
-    color: '#999',
-  },
-  tabLabelActive: {
-    color: '#4A90E2',
   },
   centerButton: {
     flex: 1,
