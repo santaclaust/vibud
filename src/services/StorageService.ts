@@ -6,6 +6,9 @@ const STORAGE_KEYS = {
   TREEHOLE: 'xinya_treehole',            // 树洞记录
   TIMEMACHINE: 'xinya_timemachine',      // 时光机记录
   CHAT_HISTORY: 'xinya_chat_history',    // AI对话历史
+  DRAFT_TREEHOLE: 'xinya_draft_treehole',     // 树洞草稿
+  DRAFT_CONFESSION: 'xinya_draft_confession', // 倾诉草稿
+  DRAFT_TIMEMACHINE: 'xinya_draft_timemachine', // 时光机草稿
 };
 
 // 倾诉记录类型
@@ -158,6 +161,38 @@ class StorageService {
   // 清空对话历史
   async clearChatHistory(): Promise<void> {
     await this.setItem(STORAGE_KEYS.CHAT_HISTORY, []);
+  }
+
+  // ========== 草稿缓存 ==========
+
+  // 保存树洞草稿
+  async saveTreeHoleDraft(text: string): Promise<void> {
+    await this.setItem(STORAGE_KEYS.DRAFT_TREEHOLE, { text, timestamp: Date.now() });
+  }
+
+  // 读取树洞草稿
+  async getTreeHoleDraft(): Promise<{ text: string; timestamp: number } | null> {
+    return await this.getItem(STORAGE_KEYS.DRAFT_TREEHOLE);
+  }
+
+  // 保存倾诉草稿
+  async saveConfessionDraft(text: string, mode: string): Promise<void> {
+    await this.setItem(STORAGE_KEYS.DRAFT_CONFESSION, { text, mode, timestamp: Date.now() });
+  }
+
+  // 读取倾诉草稿
+  async getConfessionDraft(): Promise<{ text: string; mode: string; timestamp: number } | null> {
+    return await this.getItem(STORAGE_KEYS.DRAFT_CONFESSION);
+  }
+
+  // 保存时光机草稿
+  async saveTimeMachineDraft(text: string, mood: string | null): Promise<void> {
+    await this.setItem(STORAGE_KEYS.DRAFT_TIMEMACHINE, { text, mood, timestamp: Date.now() });
+  }
+
+  // 读取时光机草稿
+  async getTimeMachineDraft(): Promise<{ text: string; mood: string | null; timestamp: number } | null> {
+    return await this.getItem(STORAGE_KEYS.DRAFT_TIMEMACHINE);
   }
 }
 

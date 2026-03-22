@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Dimensions, ScrollView, Image, ActivityIndicator, useColorScheme, Alert, Modal, Pressable } from 'react-native';
 import { getTodayQuote, getQuotesByCategory, Quote } from '../data/quotes';
-import { searchImage, getCurrentImageSource, toggleImageSource, ImageSource } from '../services/ImageSourceManager';
+import { searchImage, getCurrentImageSource, toggleImageSource, ImageSource, preloadImages, getNextImage } from '../services/ImageSourceManager';
 import themeManager, { ThemeMode, lightTheme, darkTheme } from '../services/ThemeManager';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
@@ -66,12 +66,27 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
     }
   }, [propsThemeMode]);
 
-  // 加载图片
+  // 加载图片（优先用缓存）
   const loadImage = useCallback(async (quote: Quote, category: string) => {
     setImageLoading(true);
     const source = getCurrentImageSource();
     setImageSource(source);
-    const imageUrl = await searchImage(quote.text, category);
+    
+    // Pexels 模式：先尝试从缓存获取
+    let imageUrl: string | null = null;
+    if (source === 'pexels') {
+      imageUrl = getNextImage();
+    }
+    
+    // 缓存没有再请求 API
+    if (!imageUrl) {
+      imageUrl = await searchImage(quote.text, category);
+      // 同时预加载后续图片
+      if (imageUrl) {
+        preloadImages(category, 3);
+      }
+    }
+    
     setBgImage(imageUrl);
     setImageLoading(false);
   }, []);
@@ -243,8 +258,19 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
   // 切换图片源
   const handleToggleImageSource = async () => {
     toggleImageSource();
-    setImageSource(getCurrentImageSource());
+    const newSource = getCurrentImageSource();
+    setImageSource(newSource);
     await loadImage(currentQuote, selectedCategory);
+  };
+
+  // 获取图片源显示名称
+  const getSourceDisplayName = (source: ImageSource): string => {
+    switch (source) {
+      case 'pexels': return '📸 Pexels';
+      case 'pixabay': return '🖼️ Pixabay';
+      case 'lorempicsum': return '🎲 LP';
+      default: return source;
+    }
   };
 
   // 切换主题
@@ -292,6 +318,14 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
               pixabay
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.sourceButton, imageSource === 'lorempicsum' && styles.sourceButtonActive]}
+            onPress={handleToggleImageSource}
+          >
+            <Text style={[styles.sourceButtonText, imageSource === 'lorempicsum' && styles.sourceButtonTextActive]}>
+              LP
+            </Text>
+          </TouchableOpacity>
         </View>
         
         <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.card }]} onPress={handleToggleTheme}>
@@ -323,14 +357,14 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
           <View style={[styles.imageContainer, { backgroundColor: colors.surface }]}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              {imageSource === 'pexels' ? '📸 Pexels' : '🖼️ Pixabay'}
+              {getSourceDisplayName(imageSource)}
             </Text>
           </View>
         ) : bgImage ? (
           <View style={styles.imageContainer}>
             <Image source={{ uri: bgImage }} style={styles.backgroundImage} resizeMode="cover" />
             <View style={styles.sourceTag}>
-              <Text style={styles.sourceTagText}>{imageSource === 'pexels' ? '📸 Pexels' : '🖼️ Pixabay'}</Text>
+              <Text style={styles.sourceTagText}>{getSourceDisplayName(imageSource)}</Text>
             </View>
             {/* 长按提示 */}
             {isLongPressing && (

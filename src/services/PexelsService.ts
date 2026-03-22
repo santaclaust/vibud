@@ -62,9 +62,9 @@ export async function searchImageByQuote(quoteText: string, category: string = '
       'landscape', 'nature', 'scenery', 'high resolution', 'no people', 'minimalist', 'aesthetic'
     ].join(' ');
     
-    // 获取80张以上以便筛选
+    // 获取30张以便筛选（减少传输）
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=80&orientation=portrait&size=large${EXCLUDE_PERSON}`,
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=30&orientation=portrait&size=large${EXCLUDE_PERSON}`,
       {
         headers: { Authorization: PEXELS_API_KEY },
       }
@@ -133,7 +133,7 @@ export async function getRandomImage(category: string = 'all'): Promise<string |
     ].join(' ');
     
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=80&orientation=portrait&size=large${EXCLUDE_PERSON}`,
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=30&orientation=portrait&size=large${EXCLUDE_PERSON}`,
       { headers: { Authorization: PEXELS_API_KEY } }
     );
 
@@ -173,14 +173,17 @@ export async function getRandomImage(category: string = 'all'): Promise<string |
   }
 }
 
-// 预加载多张图片
-export async function preloadImages(category: string = 'all', count: number = 5): Promise<string[]> {
+// 图片缓存池（预加载）
+const imageCache: string[] = [];
+
+// 预加载图片到缓存池
+export async function preloadImages(category: string = 'all', count: number = 3): Promise<string[]> {
   try {
     const catKeywords = categoryKeywords[category] || categoryKeywords['all'];
-    const searchWords = [...catKeywords, 'landscape', 'nature', 'high resolution'].join(' ');
+    const searchWords = [...catKeywords, 'landscape', 'nature', 'high resolution', 'no people'].join(' ');
     
     const response = await fetch(
-      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=${count * 3}&orientation=portrait&size=large${EXCLUDE_PERSON}`,
+      `${PEXELS_BASE_URL}/search?query=${encodeURIComponent(searchWords)}&per_page=${count * 4}&orientation=portrait&size=large${EXCLUDE_PERSON}`,
       { headers: { Authorization: PEXELS_API_KEY } }
     );
 
@@ -191,10 +194,16 @@ export async function preloadImages(category: string = 'all', count: number = 5)
     if (data.photos && data.photos.length > 0) {
       const filtered = data.photos.filter((photo: any) => !isLikelyPerson(photo));
       const shuffled = shuffleArray(filtered.length > 0 ? filtered : data.photos);
-      return shuffled
+      const urls = shuffled
         .slice(0, count)
         .map((photo: any) => photo.src?.large2x || photo.src?.large)
         .filter(Boolean);
+      
+      // 加入缓存池
+      imageCache.length = 0;
+      imageCache.push(...urls);
+      
+      return urls;
     }
     
     return [];
@@ -204,7 +213,16 @@ export async function preloadImages(category: string = 'all', count: number = 5)
   }
 }
 
+// 从缓存获取下一张图片（无需再请求 API）
+export function getNextCachedImage(): string | null {
+  if (imageCache.length > 0) {
+    return imageCache.shift() || null;
+  }
+  return null;
+}
+
 export default {
   getRandomImage,
   preloadImages,
+  getNextCachedImage,
 };
