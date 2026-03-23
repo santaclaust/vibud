@@ -35,6 +35,7 @@ export interface TimeMachineEntry {
   mood?: string;
   imageUrl?: string;
   timestamp: number;
+  unlockAt?: number;  // 解锁时间（时间戳），未设置则为undefined
 }
 
 // AI对话消息类型

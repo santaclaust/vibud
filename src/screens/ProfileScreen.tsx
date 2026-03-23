@@ -1,6 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
 
+interface ProfileScreenProps {
+  navigation: any;
+  colors: any;
+  userId?: string | null;
+  userInfo?: any;
+  onUserCardPress?: () => void;
+}
+
 const menuItems = [
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
   { id: 'favorites', icon: '❤️', name: '收藏', arrow: '›' },
@@ -9,9 +17,21 @@ const menuItems = [
   { id: 'about', icon: 'ℹ️', name: '关于心芽', arrow: '›' },
 ];
 
-export default function ProfileScreen({ navigation, colors }: any) {
+export default function ProfileScreen({ navigation, colors, userId, userInfo, onUserCardPress }: ProfileScreenProps) {
   const c = colors || { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#999999', border: '#F0F0F0' };
   
+  // 用户名处理
+  const displayName = userInfo?.nickname || (userId ? `用户${userId.slice(0, 6)}` : '新用户');
+  const displayDesc = userId ? (userInfo?.phone || '已登录') : '点击登录';
+  
+  // 统计数据
+  const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, continuousDays: 0 };
+
+  const handleMenuPress = (itemId: string) => {
+    // TODO: 实现各菜单功能
+    console.log('点击菜单:', itemId);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
@@ -19,35 +39,46 @@ export default function ProfileScreen({ navigation, colors }: any) {
       </View>
       
       <ScrollView style={styles.content}>
-        <View style={[styles.userCard, { backgroundColor: c.surface }]}>
+        {/* 用户卡片 - 可点击登录 */}
+        <TouchableOpacity 
+          style={[styles.userCard, { backgroundColor: c.surface }]} 
+          onPress={onUserCardPress}
+          activeOpacity={0.7}
+        >
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>🌱</Text>
           </View>
           <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: c.text }]}>新用户</Text>
-            <Text style={[styles.userDesc, { color: c.textSecondary }]}>点击登录</Text>
+            <Text style={[styles.userName, { color: c.text }]}>{displayName}</Text>
+            <Text style={[styles.userDesc, { color: c.textSecondary }]}>{displayDesc}</Text>
           </View>
           <Text style={[styles.arrow, { color: c.textSecondary }]}>›</Text>
-        </View>
+        </TouchableOpacity>
 
+        {/* 统计数据 */}
         <View style={[styles.statsRow, { backgroundColor: c.surface }]}>
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: c.text }]}>0</Text>
+            <Text style={[styles.statNum, { color: c.text }]}>{stats.confessionCount || 0}</Text>
             <Text style={[styles.statLabel, { color: c.textSecondary }]}>倾诉次数</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: c.text }]}>0</Text>
-            <Text style={[styles.statLabel, { color: c.textSecondary }]}>收藏</Text>
+            <Text style={[styles.statNum, { color: c.text }]}>{stats.treeholeCount || 0}</Text>
+            <Text style={[styles.statLabel, { color: c.textSecondary }]}>树洞</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: c.text }]}>0</Text>
+            <Text style={[styles.statNum, { color: c.text }]}>{stats.continuousDays || 0}</Text>
             <Text style={[styles.statLabel, { color: c.textSecondary }]}>连续天数</Text>
           </View>
         </View>
 
+        {/* 菜单列表 */}
         <View style={[styles.menuSection, { backgroundColor: c.surface }]}>
           {menuItems.map((item) => (
-            <TouchableOpacity key={item.id} style={[styles.menuItem, { borderBottomColor: c.border }]}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={[styles.menuItem, { borderBottomColor: c.border }]}
+              onPress={() => handleMenuPress(item.id)}
+            >
               <Text style={styles.menuIcon}>{item.icon}</Text>
               <Text style={[styles.menuName, { color: c.text }]}>{item.name}</Text>
               <Text style={[styles.menuArrow, { color: c.textSecondary }]}>{item.arrow}</Text>
