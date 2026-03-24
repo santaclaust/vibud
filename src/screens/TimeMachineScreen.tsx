@@ -81,11 +81,13 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
     successIcon: { fontSize: 40, marginBottom: 12 },
     successText: { fontSize: 16, fontWeight: '600' as const, color: colors.text, marginBottom: 4 },
     successSubtext: { fontSize: 13, color: colors.textSecondary },
-    detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' as const },
-    detailCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' as const },
+    detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start' as const, paddingTop: 60 },
+    detailCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginHorizontal: 16, maxHeight: '60%' as const, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
+    detailHandle: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: '#D0D0D0', alignSelf: 'center' as 'center', marginBottom: 16 },
     detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 4 },
     detailDate: { fontSize: 16, fontWeight: '600' as const, color: colors.text },
-    closeButton: { fontSize: 20, color: colors.textSecondary, padding: 4 },
+    closeButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.background, justifyContent: 'center' as const, alignItems: 'center' as const },
+    closeButtonIcon: { fontSize: 14, color: colors.text },
     detailTime: { fontSize: 13, color: colors.textSecondary, marginBottom: 12 },
     detailMood: { marginBottom: 16 },
     detailMoodIcon: { fontSize: 40 },
@@ -484,11 +486,17 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
           </View>
         </Modal>
 
-        <Modal visible={!!selectedEntry} transparent animationType="slide" onRequestClose={() => setSelectedEntry(null)}>
+        <Modal visible={!!selectedEntry} transparent animationType="fade" onRequestClose={() => setSelectedEntry(null)}>
           <View style={s.detailOverlay}>
             <View style={s.detailCard}>
               {selectedEntry && (<>
-                <View style={s.detailHeader}><Text style={s.detailDate}>{formatDate(selectedEntry.timestamp)}</Text><TouchableOpacity onPress={() => setSelectedEntry(null)}><Text style={s.closeButton}>✕</Text></TouchableOpacity></View>
+                <View style={s.detailHandle} />
+                <View style={s.detailHeader}>
+                  <Text style={s.detailDate}>{formatDate(selectedEntry.timestamp)}</Text>
+                  <TouchableOpacity style={s.closeButton} onPress={() => setSelectedEntry(null)}>
+                    <Text style={s.closeButtonIcon}>✕</Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={s.detailTime}>{formatTime(selectedEntry.timestamp)}</Text>
                 {selectedEntry.mood && <View style={s.detailMood}><Text style={s.detailMoodIcon}>{getMoodIcon(selectedEntry.mood)}</Text></View>}
                 <ScrollView style={s.detailContent}><Text style={s.detailText}>{selectedEntry.text}</Text></ScrollView>
