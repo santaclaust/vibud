@@ -86,8 +86,8 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
     detailHandle: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: '#D0D0D0', alignSelf: 'center' as 'center', marginBottom: 16 },
     detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 4 },
     detailDate: { fontSize: 16, fontWeight: '600' as const, color: colors.text },
-    closeButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.background, justifyContent: 'center' as const, alignItems: 'center' as const },
-    closeButtonIcon: { fontSize: 14, color: colors.text },
+    closeButton: { marginTop: 20, backgroundColor: colors.background, paddingVertical: 14, borderRadius: 12, alignItems: 'center' as const },
+    closeButtonText: { fontSize: 16, color: colors.primary, fontWeight: '600' as const },
     detailTime: { fontSize: 13, color: colors.textSecondary, marginBottom: 12 },
     detailMood: { marginBottom: 16 },
     detailMoodIcon: { fontSize: 40 },
@@ -493,13 +493,14 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
                 <View style={s.detailHandle} />
                 <View style={s.detailHeader}>
                   <Text style={s.detailDate}>{formatDate(selectedEntry.timestamp)}</Text>
-                  <TouchableOpacity style={s.closeButton} onPress={() => setSelectedEntry(null)}>
-                    <Text style={s.closeButtonIcon}>✕</Text>
-                  </TouchableOpacity>
+                  <View style={{ width: 28 }} />
                 </View>
                 <Text style={s.detailTime}>{formatTime(selectedEntry.timestamp)}</Text>
                 {selectedEntry.mood && <View style={s.detailMood}><Text style={s.detailMoodIcon}>{getMoodIcon(selectedEntry.mood)}</Text></View>}
                 <ScrollView style={s.detailContent}><Text style={s.detailText}>{selectedEntry.text}</Text></ScrollView>
+                <TouchableOpacity style={s.closeButton} onPress={() => setSelectedEntry(null)}>
+                  <Text style={s.closeButtonText}>关闭</Text>
+                </TouchableOpacity>
               </>)}
             </View>
           </View>
