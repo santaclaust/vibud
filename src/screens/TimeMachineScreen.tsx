@@ -81,9 +81,8 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
     successIcon: { fontSize: 40, marginBottom: 12 },
     successText: { fontSize: 16, fontWeight: '600' as const, color: colors.text, marginBottom: 4 },
     successSubtext: { fontSize: 13, color: colors.textSecondary },
-    detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start' as const, paddingTop: 60 },
+    detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center' as const, alignItems: 'center' as const },
     detailCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginHorizontal: 16, maxHeight: '60%' as const, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
-    detailHandle: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: '#D0D0D0', alignSelf: 'center' as 'center', marginBottom: 16 },
     detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 4 },
     detailDate: { fontSize: 16, fontWeight: '600' as const, color: colors.text },
     closeButton: { marginTop: 20, backgroundColor: colors.background, paddingVertical: 14, borderRadius: 12, alignItems: 'center' as const },
@@ -490,7 +489,6 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
           <View style={s.detailOverlay}>
             <View style={s.detailCard}>
               {selectedEntry && (<>
-                <View style={s.detailHandle} />
                 <View style={s.detailHeader}>
                   <Text style={s.detailDate}>{formatDate(selectedEntry.timestamp)}</Text>
                   <View style={{ width: 28 }} />
