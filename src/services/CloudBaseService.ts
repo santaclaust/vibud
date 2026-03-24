@@ -216,6 +216,16 @@ export interface Message {
   timestamp: number;
 }
 
+export interface EmotionLog {
+  _id?: string;
+  id: string;
+  userId: string;
+  keywords: string[];    // 3个关键词
+  mood?: string;          // 主情绪
+  textExcerpt: string;    // 原始文本摘要（限50字）
+  timestamp: number;
+}
+
 // ========== 业务层封装 ==========
 
 /** 创建/更新用户资料 */
@@ -339,7 +349,100 @@ export const markMessageRead = async (docId: string) => {
   return await updateDocument('messages', docId, { read: true });
 };
 
-// ========== 文件存储 ==========
+// ========== 情绪日志 ==========
+
+/** 保存情绪日志（倾诉后提取关键词） */
+export const saveEmotionLog = async (log: Omit<EmotionLog, 'id' | '_id'>) => {
+  const id = 'emot_' + Date.now();
+  return await addDocument('emotion_logs', { ...log, id, timestamp: Date.now() });
+};
+
+/** 获取用户情绪日志（时间线） */
+export const getEmotionLogs = async (userId: string, limitCount = 30) => {
+  const res = await queryDocuments(
+    'emotion_logs',
+    { userId },
+    [{ field: 'timestamp', order: 'desc' }],
+    limitCount
+  );
+  return res.data || [];
+};
+
+// ========== 情绪关键词提取（本地规则） ==========
+
+/** 情绪词库 */
+const EMOTION_WORDS = [
+  '焦虑', '焦虑感', '焦虑的', '担忧', '担心', '害怕', '恐惧', '紧张',
+  '悲伤', '难过', '伤心', '痛苦', '心碎', '沮丧', '低落', '抑郁',
+  '孤独', '寂寞', '空落落', '空荡荡',
+  '迷茫', '困惑', '不知所措', '方向', '迷茫的',
+  '愤怒', '生气', '恼火', '烦躁', '烦躁的',
+  '失眠', '睡不着', '熬夜', '早醒', '睡眠',
+  '工作', '职场', '辞职', '裁员', '加班',
+  '感情', '失恋', '分手', '婚姻', '争吵', '冷战',
+  '家庭', '父母', '亲子', '亲情',
+  '健康', '身体', '生病', '疲惫', '累',
+  '释怀', '放下', '接受', '平静', '治愈',
+];
+
+/** 停用词（不作为关键词） */
+const STOP_WORDS = new Set([
+  '我', '你', '他', '她', '它', '的', '了', '是', '在', '有',
+  '和', '就', '不', '也', '很', '都', '会', '能', '想', '觉得',
+  '感觉', '好像', '可能', '知道', '其实', '已经', '还是', '但是',
+  '因为', '所以', '如果', '虽然', '然后', '一直', '什么', '怎么',
+  '今天', '最近', '现在', '有时候', '有时候', '每次', '总是',
+  '有点', '有些', '一些', '特别', '真的', '非常', '越来越',
+]);
+
+/**
+ * 从文本中提取3个关键词
+ * 策略：先匹配情绪词，再提取高频名词/动词
+ */
+export const extractEmotionKeywords = (text: string): string[] => {
+  const words: Array<{ word: string; score: number; type: 'emotion' | 'noun' }> = [];
+  
+  // 1. 匹配情绪词
+  for (const emotion of EMOTION_WORDS) {
+    if (text.includes(emotion)) {
+      words.push({ word: emotion, score: 3, type: 'emotion' });
+    }
+  }
+  
+  // 2. 提取名词/动词片段（简单分词）
+  const fragments = text.split(/[,，、。！？；：""''（）()、\n\r\s]+/)
+    .filter(f => f.length >= 2 && f.length <= 8)
+    .filter(f => !STOP_WORDS.has(f))
+    .filter(f => !EMOTION_WORDS.includes(f));
+  
+  // 统计词频
+  const freq = new Map<string, number>();
+  for (const f of fragments) {
+    freq.set(f, (freq.get(f) || 0) + 1);
+  }
+  
+  // 取高频词
+  const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [word, count] of sorted) {
+    if (words.length >= 5) break;
+    if (!words.find(w => w.word === word)) {
+      words.push({ word, score: count, type: 'noun' });
+    }
+  }
+  
+  // 优先取情绪词，取满3个
+  const emotionWords = words.filter(w => w.type === 'emotion').map(w => w.word);
+  const otherWords = words.filter(w => w.type === 'noun').map(w => w.word);
+  
+  const result = [...emotionWords, ...otherWords].slice(0, 3);
+  
+  // 不够3个用占位
+  while (result.length < 3) {
+    result.push('...');
+  }
+  
+  return result;
+};
 
 /**
  * 上传文件
