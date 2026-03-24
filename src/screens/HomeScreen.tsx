@@ -5,7 +5,6 @@ import { searchImage, getCurrentImageSource, toggleImageSource, ImageSource, pre
 import themeManager, { ThemeMode, lightTheme, darkTheme } from '../services/ThemeManager';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
-import * as ScreenOrientation from 'expo-screen-orientation';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -224,7 +223,8 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
       }
       
       const filename = 'xinya_' + Date.now() + '.jpg';
-      const fileUri = FileSystem.documentDirectory + filename;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fileUri = ((FileSystem as any).documentDirectory || '') + filename;
       
       // 下载图片
       const downloadResult = await FileSystem.downloadAsync(bgImage, fileUri);

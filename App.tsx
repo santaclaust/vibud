@@ -53,7 +53,7 @@ export default function App() {
                 updatedAt: Date.now(),
                 stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 }
               });
-              profile = { id: uid, nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } };
+              profile = { id: uid, nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } } as any;
             }
             setUserInfo(profile);
           }
