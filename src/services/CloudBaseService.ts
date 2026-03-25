@@ -372,15 +372,16 @@ export const markMessageRead = async (docId: string) => {
 
 // ========== 社群帖子 ==========
 
-/** 发布社群帖子 */
+/** 发布社群帖子 - addDocument返回的id就是CloudBase的_id */
 export const publishPost = async (post: {
   authorId: string;
   authorName: string;
   text: string;
   category: string;
-}) => {
+}): Promise<{ id: string; docId: string }> => {
   const id = 'post_' + Date.now();
-  return await addDocument('community_posts', {
+  const createdAt = Date.now();
+  const r: any = await addDocument('community_posts', {
     ...post,
     id,
     warmthCount: 0,
@@ -388,43 +389,29 @@ export const publishPost = async (post: {
     commentCount: 0,
     shareCount: 0,
     collectedBy: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt,
+    updatedAt: createdAt,
   });
-};
-  authorId: string;
-  authorName: string;
-  text: string;
-  category: string;
-}) => {
-  const id = 'post_' + Date.now();
-  return await addDocument('community_posts', {
-    ...post,
-    id,
-    warmthCount: 0,
-    warmedBy: [],
-    commentCount: 0,
-    shareCount: 0,
-    collectedBy: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
+  // CloudBase add返回的id字段就是内置_cloudbase_id
+  const docId = r?.id || '';
+  console.log('[CloudBase] publishPost 自定义id:', id, 'CloudBase _id:', docId);
+  return { id, docId };
 };
 
-/** 获取社群帖子列表（按分类或全部） - 显式包含_id */
+/** 获取社群帖子列表（按分类或全部） */
 export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
     if (!initialized) await initCloudBase();
-    let q = app!.database().collection('community_posts').field({ _id: true, id: true, authorId: true, authorName: true, text: true, category: true, warmthCount: true, warmedBy: true, commentCount: true, shareCount: true, collectedBy: true, createdAt: true });
+    let q = app!.database().collection('community_posts');
     if (category && category !== '全部') {
       q = q.where({ category });
     }
     const r = await q.limit(limitCount).get();
     console.log('[CloudBase] getCommunityPosts 条数:', r.data?.length, 'keys:', Object.keys(r.data?.[0] || {}));
     const data = (r.data || []).map((doc: any) => {
-      const normalized = { ...doc, id: doc.id || doc._id };
-      console.log('[CloudBase] _id:', doc._id, 'id:', doc.id, 'normalized.id:', normalized.id);
-      return normalized;
+      const docId = doc.docId || doc._id || doc.id;
+      console.log('[CloudBase] doc id:', doc.id, 'docId:', docId);
+      return { ...doc, id: doc.id || docId, docId };
     });
     return data.sort((a: any, b: any) => b.createdAt - a.createdAt);
   } catch (err) {
