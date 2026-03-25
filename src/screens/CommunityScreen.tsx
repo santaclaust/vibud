@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
-import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect } from '../services/CloudBaseService';
+import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates } from '../services/CloudBaseService';
 
 const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
 const CATEGORY_COLORS: Record<string, string> = {
@@ -35,11 +35,18 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     try {
       const category = activeCategory === '全部' ? undefined : activeCategory;
       const data = await getCommunityPosts(category, 100);
-      console.log('[Community] fetchPosts 返回条数:', data.length, '首条:', JSON.stringify(data[0])?.slice(0, 200));
-      setPosts(data);
+      // 批量查询当前用户对所有帖子的暖心/收藏状态
+      const postIds = data.map((p: any) => p._id || p.id);
+      const { likedSet, collectedSet } = await getUserPostStates(postIds, uid);
+      const merged = data.map((p: any) => {
+        const pid = p._id || p.id;
+        return { ...p, _warmed: likedSet.has(pid), _collected: collectedSet.has(pid) };
+      });
+      console.log('[Community] fetchPosts:', merged.length, '条，暖心状态:', likedSet.size, '收藏状态:', collectedSet.size);
+      setPosts(merged);
     } catch (err) { console.error('获取帖子失败:', err); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [activeCategory]);
+  }, [activeCategory, uid]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -64,11 +71,12 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const handleWarmth = async (post: any) => {
-    const postId = post.id || post._id;
-    if (!postId) { Alert.alert('帖子数据异常'); return; }
+    if (!post._id) { Alert.alert('帖子数据异常'); return; }
     try {
-      const warmed = (post.warmedBy || []).includes(uid);
-      const updated = { ...post, warmthCount: warmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1, warmedBy: warmed ? (post.warmedBy || []).filter((u: string) => u !== uid) : [...(post.warmedBy || []), uid] };
+      // 新状态 = 取反当前状态
+      const newWarmed = !post._warmed;
+      const newCount = newWarmed ? (post.warmthCount || 0) + 1 : Math.max(0, (post.warmthCount || 0) - 1);
+      const updated = { ...post, _warmed: newWarmed, warmthCount: newCount };
       syncPost(updated);
       await toggleWarmth(post._id, uid);
     } catch (err) {
@@ -81,8 +89,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const handleCollect = async (post: any) => {
     if (!post._id) { Alert.alert('帖子数据异常'); return; }
     try {
-      const collected = (post.collectedBy || []).includes(uid);
-      const updated = { ...post, collectedBy: collected ? (post.collectedBy || []).filter((u: string) => u !== uid) : [...(post.collectedBy || []), uid] };
+      const newCollected = !post._collected;
+      const updated = { ...post, _collected: newCollected };
       syncPost(updated);
       await toggleCollect(post._id, uid);
     } catch (err) {
@@ -115,8 +123,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     return new Date(ms).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
   };
 
-  const isWarmed = (post: any) => (post.warmedBy || []).includes(uid);
-  const isCollected = (post: any) => (post.collectedBy || []).includes(uid);
+  const isWarmed = (post: any) => post._warmed || false;
+  const isCollected = (post: any) => post._collected || false;
 
   const renderPost = ({ item }: { item: any }) => (
     <View style={styles.postCard}>

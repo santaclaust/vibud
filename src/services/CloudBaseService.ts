@@ -400,35 +400,23 @@ export const publishPost = async (post: {
   return { id, docId };
 };
 
-/** 获取社群帖子列表（按分类或全部） */
+/** 获取社群帖子列表（按分类或全部） - 不含用户点赞/收藏状态（状态独立查询） */
 export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
     if (!initialized) await initCloudBase();
     let q = app!.database().collection('community_posts');
-    // 临时去掉where测试：直接查全部，不加任何过滤
-    // if (category && category !== '全部') {
-    //   q = q.where({ category });
-    // }
     const r = await q.limit(limitCount).get();
-    console.log('[CloudBase] getCommunityPosts raw:', JSON.stringify(r).slice(0, 500));
     const docs = r.data || [];
-    console.log('[CloudBase] getCommunityPosts 条数:', docs.length);
     const data = docs.map((doc: any) => {
-      // 兼容旧帖子（嵌套 data）和新帖子（顶层字段）
       const inner = doc.data || {};
       const warmthCount = doc.warmthCount ?? inner.warmthCount ?? 0;
-      const warmedBy: string[] = doc.warmedBy ?? inner.warmedBy ?? [];
-      const collectedBy: string[] = doc.collectedBy ?? inner.collectedBy ?? [];
       const id = doc.id || doc._id || '';
-      console.log('[CloudBase] doc _id:', doc._id, 'warmthCount:', warmthCount, 'warmedBy:', warmedBy.length);
       return {
         ...doc,
-        ...inner, // 旧帖子字段展开
+        ...inner,
         id,
         docId: id,
         warmthCount,
-        warmedBy,
-        collectedBy,
       };
     });
     return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -438,63 +426,109 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- set整条文档，统一用顶层字段格式，删除旧嵌套 data */
+/** 批量获取某用户对一批帖子的暖心/收藏状态 */
+export const getUserPostStates = async (postIds: string[], userId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const [likeR, collectR] = await Promise.all([
+      app!.database().collection('post_likes').where({ userId }).get(),
+      app!.database().collection('post_collects').where({ userId }).get(),
+    ]);
+    const likedSet = new Set((likeR.data || []).map((d: any) => d.postId));
+    const collectedSet = new Set((collectR.data || []).map((d: any) => d.postId));
+    return { likedSet, collectedSet };
+  } catch {
+    return { likedSet: new Set<string>(), collectedSet: new Set<string>() };
+  }
+};
+
+/** 查询某用户是否暖心过某帖子 - 独立 likes 集合，不再存数组 */
+const getPostLikes = async (postId: string, userId: string) => {
+  if (!initialized) await initCloudBase();
+  const r = await app!.database().collection('post_likes')
+    .where({ postId, userId })
+    .limit(1).get();
+  return r.data?.length > 0;
+};
+
+/** 暖心（toggle）- 独立 post_likes 集合存记录，warmthCount 为计数器 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleWarmth _id:', postId);
+    console.log('[CloudBase] toggleWarmth postId:', postId, 'userId:', userId);
     
-    const r = await app!.database().collection('community_posts').doc(postId).get();
-    if (!r.data) throw new Error('帖子不存在: ' + postId);
+    const postR = await app!.database().collection('community_posts').doc(postId).get();
+    if (!postR.data) throw new Error('帖子不存在');
+    const post: any = postR.data;
+    const inner = post.data || {};
+    const currentCount = post.warmthCount ?? inner.warmthCount ?? 0;
     
-    const post: any = r.data;
-    // 优先读顶层字段，fallback 嵌套 data（旧帖子格式）
-    const warmthCount = post.warmthCount ?? post.data?.warmthCount ?? 0;
-    const warmedBy: string[] = post.warmedBy ?? post.data?.warmedBy ?? [];
-    const hasWarmed = warmedBy.includes(userId);
-    const newCount = hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1;
-    const newWarmedBy = hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId];
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'newCount:', newCount);
+    const hasLiked = await getPostLikes(postId, userId);
+    console.log('[CloudBase] 已暖心:', hasLiked, '当前count:', currentCount);
     
-    // set 替换整条文档，统一格式：删除 data 嵌套，全部存顶层
-    const { data: _ignored, ...rest } = post; // 移除旧嵌套 data
-    await app!.database().collection('community_posts').doc(postId).set({
-      ...rest,
-      warmthCount: newCount,
-      warmedBy: newWarmedBy,
-    });
-    console.log('[CloudBase] 暖心成功');
+    if (hasLiked) {
+      // 取消暖心：删 likes 记录，计数 -1
+      const likeR = await app!.database().collection('post_likes')
+        .where({ postId, userId }).limit(1).get();
+      if (likeR.data?.[0]) {
+        await app!.database().collection('post_likes').doc(likeR.data[0]._id).remove();
+      }
+      const newCount = Math.max(0, currentCount - 1);
+      await app!.database().collection('community_posts').doc(postId).update({ warmthCount: newCount });
+      console.log('[CloudBase] 取消暖心成功 count:', newCount);
+    } else {
+      // 暖心：加 likes 记录，计数 +1
+      await app!.database().collection('post_likes').add({ postId, userId, createdAt: Date.now() });
+      await app!.database().collection('community_posts').doc(postId).update({ warmthCount: currentCount + 1 });
+      console.log('[CloudBase] 暖心成功 count:', currentCount + 1);
+    }
   } catch (err) {
     console.error('[CloudBase] toggleWarmth 失败:', err);
     throw err;
   }
 };
 
-/** 收藏（toggle） */
+/** 收藏（toggle）- 独立 post_collects 集合存记录 */
+const getPostCollects = async (postId: string, userId: string) => {
+  if (!initialized) await initCloudBase();
+  const r = await app!.database().collection('post_collects')
+    .where({ postId, userId }).limit(1).get();
+  return r.data?.length > 0;
+};
+
 export const toggleCollect = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleCollect _id:', postId);
+    console.log('[CloudBase] toggleCollect postId:', postId, 'userId:', userId);
     
-    const r = await app!.database().collection('community_posts').doc(postId).get();
-    if (!r.data) throw new Error('帖子不存在: ' + postId);
+    const hasCollected = await getPostCollects(postId, userId);
+    console.log('[CloudBase] 已收藏:', hasCollected);
     
-    const post: any = r.data;
-    const collectedBy: string[] = post.collectedBy ?? post.data?.collectedBy ?? [];
-    const hasCollected = collectedBy.includes(userId);
-    const newCollectedBy = hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId];
-    console.log('[CloudBase] hasCollected:', hasCollected, 'collectedBy:', newCollectedBy);
-    
-    const { data: _ignored, ...rest } = post;
-    await app!.database().collection('community_posts').doc(postId).set({
-      ...rest,
-      collectedBy: newCollectedBy,
-    });
-    console.log('[CloudBase] 收藏成功');
+    if (hasCollected) {
+      const r = await app!.database().collection('post_collects')
+        .where({ postId, userId }).limit(1).get();
+      if (r.data?.[0]) {
+        await app!.database().collection('post_collects').doc(r.data[0]._id).remove();
+      }
+      console.log('[CloudBase] 取消收藏成功');
+    } else {
+      await app!.database().collection('post_collects').add({ postId, userId, createdAt: Date.now() });
+      console.log('[CloudBase] 收藏成功');
+    }
   } catch (err) {
     console.error('[CloudBase] toggleCollect 失败:', err);
     throw err;
   }
+};
+
+/** 判断某用户是否暖心过某帖子（用于渲染状态） */
+export const isPostWarmedByUser = async (postId: string, userId: string): Promise<boolean> => {
+  return getPostLikes(postId, userId);
+};
+
+/** 判断某用户是否收藏过某帖子 */
+export const isPostCollectedByUser = async (postId: string, userId: string): Promise<boolean> => {
+  return getPostCollects(postId, userId);
 };
 
 // ========== 情绪日志 ==========
