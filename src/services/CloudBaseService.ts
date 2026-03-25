@@ -411,25 +411,28 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 直接用 database API 避免 orderBy 索引问题 */
-export const toggleWarmth = async (postId: string, userId: string) => {
+/** 暖心（toggle）- 通过 _id 精确查询，避免索引问题 */
+export const toggleWarmth = async (postId: string, userId: string, docId?: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleWarmth:', postId, userId);
+    console.log('[CloudBase] toggleWarmth:', { postId, docId, userId });
     
-    // 直接查询，不用 queryDocuments 包装
-    const result = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-    console.log('[CloudBase] 查询结果:', JSON.stringify(result));
+    if (!postId && !docId) throw new Error('帖子ID为空');
     
-    if (!result.data || result.data.length === 0) {
-      console.error('[CloudBase] 未找到帖子:', postId);
-      throw new Error('帖子不存在');
+    let post: CommunityPost;
+    if (docId) {
+      const r = await app!.database().collection('community_posts').doc(docId).get();
+      if (!r.data) throw new Error('帖子不存在');
+      post = r.data as CommunityPost;
+    } else {
+      const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+      if (!r.data?.[0]) throw new Error('帖子不存在');
+      post = r.data[0] as CommunityPost;
     }
     
-    const post = result.data[0] as CommunityPost;
     const warmedBy = post.warmedBy || [];
     const hasWarmed = warmedBy.includes(userId);
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'warmedBy:', warmedBy);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'docId:', post._id);
     
     await app!.database().collection('community_posts').doc(post._id).update({
       warmthCount: hasWarmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1,
@@ -444,20 +447,24 @@ export const toggleWarmth = async (postId: string, userId: string) => {
 };
 
 /** 收藏（toggle） */
-export const toggleCollect = async (postId: string, userId: string) => {
+export const toggleCollect = async (postId: string, userId: string, docId?: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleCollect:', postId, userId);
+    console.log('[CloudBase] toggleCollect:', { postId, docId, userId });
     
-    const result = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-    console.log('[CloudBase] 查询结果:', JSON.stringify(result));
+    if (!postId && !docId) throw new Error('帖子ID为空');
     
-    if (!result.data || result.data.length === 0) {
-      console.error('[CloudBase] 未找到帖子:', postId);
-      throw new Error('帖子不存在');
+    let post: CommunityPost;
+    if (docId) {
+      const r = await app!.database().collection('community_posts').doc(docId).get();
+      if (!r.data) throw new Error('帖子不存在');
+      post = r.data as CommunityPost;
+    } else {
+      const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+      if (!r.data?.[0]) throw new Error('帖子不存在');
+      post = r.data[0] as CommunityPost;
     }
     
-    const post = result.data[0] as CommunityPost;
     const collectedBy = post.collectedBy || [];
     const hasCollected = collectedBy.includes(userId);
     console.log('[CloudBase] hasCollected:', hasCollected);
