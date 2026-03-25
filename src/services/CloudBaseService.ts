@@ -187,6 +187,24 @@ export interface TreeHolePost {
   likedBy?: string[];
 }
 
+// 社群帖子
+export interface CommunityPost {
+  _id?: string;
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  text: string;
+  category: string;
+  warmthCount: number;
+  warmedBy: string[];
+  commentCount: number;
+  shareCount: number;
+  collectedBy: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TimeMachineEntry {
   _id?: string;
   id: string;
@@ -348,6 +366,69 @@ export const getUserMessages = async (userId: string) => {
 /** 标记消息已读 */
 export const markMessageRead = async (docId: string) => {
   return await updateDocument('messages', docId, { read: true });
+};
+
+// ========== 社群帖子 ==========
+
+/** 发布社群帖子 */
+export const publishPost = async (post: {
+  authorId: string;
+  authorName: string;
+  text: string;
+  category: string;
+}) => {
+  const id = 'post_' + Date.now();
+  return await addDocument('community_posts', {
+    ...post,
+    id,
+    warmthCount: 0,
+    warmedBy: [],
+    commentCount: 0,
+    shareCount: 0,
+    collectedBy: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+};
+
+/** 获取社群帖子列表（按分类或全部） */
+export const getCommunityPosts = async (category?: string, limitCount = 50) => {
+  const res = await queryDocuments(
+    'community_posts',
+    category && category !== '全部' ? { category } : undefined,
+    [{ field: 'createdAt', order: 'desc' }],
+    limitCount
+  );
+  return res.data || [];
+};
+
+/** 暖心（toggle） */
+export const toggleWarmth = async (postId: string, userId: string) => {
+  const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
+  if (!posts.data?.[0]) return;
+  const post = posts.data[0] as CommunityPost;
+  const warmedBy = post.warmedBy || [];
+  const hasWarmed = warmedBy.includes(userId);
+  
+  return await updateDocument('community_posts', post._id!, {
+    warmthCount: hasWarmed ? Math.max(0, post.warmthCount - 1) : post.warmthCount + 1,
+    warmedBy: hasWarmed ? warmedBy.filter(u => u !== userId) : [...warmedBy, userId],
+    updatedAt: Date.now(),
+  });
+};
+
+/** 收藏（toggle） */
+export const toggleCollect = async (postId: string, userId: string) => {
+  const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
+  if (!posts.data?.[0]) return;
+  const post = posts.data[0] as CommunityPost;
+  const collectedBy = post.collectedBy || [];
+  const hasCollected = collectedBy.includes(userId);
+  
+  return await updateDocument('community_posts', post._id!, {
+    collectedBy: hasCollected ? collectedBy.filter(u => u !== userId) : [...collectedBy, userId],
+    updatedAt: Date.now(),
+  });
 };
 
 // ========== 情绪日志 ==========
