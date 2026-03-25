@@ -392,21 +392,38 @@ export const publishPost = async (post: {
     updatedAt: Date.now(),
   });
 };
+  authorId: string;
+  authorName: string;
+  text: string;
+  category: string;
+}) => {
+  const id = 'post_' + Date.now();
+  return await addDocument('community_posts', {
+    ...post,
+    id,
+    warmthCount: 0,
+    warmedBy: [],
+    commentCount: 0,
+    shareCount: 0,
+    collectedBy: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+};
 
-/** 获取社群帖子列表（按分类或全部） */
+/** 获取社群帖子列表（按分类或全部） - 显式包含_id */
 export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
-    const res = await queryDocuments(
-      'community_posts',
-      category && category !== '全部' ? { category } : undefined,
-      undefined,
-      limitCount
-    );
-    console.log('[CloudBase] getCommunityPosts 返回条数:', res.data?.length, '首条keys:', Object.keys(res.data?.[0] || {}));
-    // CloudBase返回_id（系统字段）规范化为id，保证UI和toggle都能用
-    const data = (res.data || []).map((doc: any) => {
+    if (!initialized) await initCloudBase();
+    let q = app!.database().collection('community_posts').field({ _id: true, id: true, authorId: true, authorName: true, text: true, category: true, warmthCount: true, warmedBy: true, commentCount: true, shareCount: true, collectedBy: true, createdAt: true });
+    if (category && category !== '全部') {
+      q = q.where({ category });
+    }
+    const r = await q.limit(limitCount).get();
+    console.log('[CloudBase] getCommunityPosts 条数:', r.data?.length, 'keys:', Object.keys(r.data?.[0] || {}));
+    const data = (r.data || []).map((doc: any) => {
       const normalized = { ...doc, id: doc.id || doc._id };
-      console.log('[CloudBase] 规范化后 id:', normalized.id, '_id:', normalized._id);
+      console.log('[CloudBase] _id:', doc._id, 'id:', doc.id, 'normalized.id:', normalized.id);
       return normalized;
     });
     return data.sort((a: any, b: any) => b.createdAt - a.createdAt);
