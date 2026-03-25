@@ -115,7 +115,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
         <View style={[styles.menuSection, { backgroundColor: c.surface }]}>
           {menuItems.map(item => (
             <TouchableOpacity key={item.id} style={[styles.menuItem, { borderBottomColor: c.border }]} onPress={() => handleMenuPress(item.id)}>
-              <Text style={styles.menuIcon}>{item.icon}</Text>
+              <Text style={[styles.menuIcon, item.id === 'favorites' && { color: '#FFD700' }]}>{item.icon}</Text>
               <Text style={[styles.menuName, { color: c.text }]}>{item.name}</Text>
               <Text style={[styles.menuArrow, { color: c.textSecondary }]}>{item.arrow}</Text>
             </TouchableOpacity>
