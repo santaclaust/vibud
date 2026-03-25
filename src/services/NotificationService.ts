@@ -105,7 +105,7 @@ class NotificationService {
   }
 
   // 立即发送通知
-  private async sendImmediate(params: {
+  async sendImmediate(params: {
     title: string;
     body: string;
     data?: any;

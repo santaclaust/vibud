@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Scro
 import { aiService } from '../services/AIService';
 import { storageService } from '../services/StorageService';
 import { saveEmotionLog, extractEmotionKeywords } from '../services/CloudBaseService';
+import { notifyEmotionSaved } from '../services/CloudNotificationService';
 
 interface ModeOption { id: string; name: string; icon: string; description: string; }
 interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; timestamp: number; }
@@ -132,6 +133,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         textExcerpt: fullText.slice(0, 50),
         timestamp: Date.now(),
       });
+      // 同时发送通知
+      notifyEmotionSaved(keywords, uid);
       setEmotionKeywords(keywords);
       setShowCompletionHint(true);
     } catch (err) {

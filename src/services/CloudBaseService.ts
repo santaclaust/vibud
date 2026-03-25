@@ -181,6 +181,7 @@ export interface TreeHolePost {
   id: string;
   userId: string;
   text: string;
+  category?: string;
   timestamp: number;
   likes: number;
   likedBy?: string[];
@@ -266,7 +267,7 @@ export const getUserConfessions = async (userId: string, limitCount = 50) => {
 };
 
 /** 发布树洞 */
-export const postTreeHole = async (post: Omit<TreeHolePost, 'id' | '_id'>) => {
+export const postTreeHole = async (post: Omit<TreeHolePost, 'id' | '_id' | 'timestamp'>) => {
   const id = `tree_${Date.now()}`;
   return await addDocument('treehole', { ...post, id, timestamp: Date.now() });
 };
