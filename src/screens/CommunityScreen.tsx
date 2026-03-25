@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments, getPostById } from '../services/CloudBaseService';
+import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments } from '../services/CloudBaseService';
 
 const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
 const CATEGORY_COLORS: Record<string, string> = {
@@ -113,20 +113,13 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const openComment = async (post: any) => {
+    // 直接用传入的 post 对象，不需要额外查询
     setCommentPost(post);
     setComments([]);
     if (!uid || !post._id) return;
     try {
-      const [comments, postData] = await Promise.all([
-        getComments(post._id),
-        getPostById(post._id),
-      ]);
-      setComments(comments);
-      if (postData) {
-        // 确保 _id 是干净字符串（CloudBase 返回的可能是对象格式）
-        const cleanPost = { ...postData, _id: String(postData._id || post._id) };
-        setCommentPost(cleanPost);
-      }
+      const data = await getComments(post._id);
+      setComments(data);
     } catch (err) { console.error('加载评论失败:', err); }
   };
 
@@ -289,26 +282,11 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
               <View style={styles.commentPostHeader}>
                 <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
                 <View style={styles.authorInfo}>
-                  <Text style={[styles.authorName, { color: c.text }]}>{commentPost?.authorName}</Text>
+                  <Text style={[styles.authorName, { color: c.text }]}>{commentPost?.authorName || '匿名用户'}</Text>
                   <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(commentPost?.createTime)}</Text>
                 </View>
               </View>
-              <Text style={[styles.commentPostText, { color: c.text }]}>{commentPost?.text}</Text>
-              {/* 操作栏 */}
-              <View style={[styles.actionBar, { borderTopColor: c.border, marginTop: 12 }]}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => commentPost && handleWarmth(commentPost)}>
-                  <Text style={[styles.actionIcon, isWarmed(commentPost || {}) ? styles.actionIconRed : { color: c.textSecondary }]}>{isWarmed(commentPost || {}) ? '❤️' : '🤍'}</Text>
-                  <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(commentPost || {}) && styles.actionCountRed]}>{commentPost?.likeCount || 0}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn}>
-                  <Text style={[styles.actionIcon, { color: c.textSecondary }]}>💬</Text>
-                  <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost?.commentCount || 0}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => commentPost && handleCollect(commentPost)}>
-                  <Text style={[styles.actionIcon, isCollected(commentPost || {}) ? styles.actionIconYellow : { color: c.textSecondary }]}>{isCollected(commentPost || {}) ? '★' : '☆'}</Text>
-                  <Text style={[styles.actionCount, { color: c.textSecondary }, isCollected(commentPost || {}) && styles.actionCountYellow]}>{isCollected(commentPost || {}) ? '已收藏' : '收藏'}</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={[styles.commentPostText, { color: c.text }]}>{commentPost?.text || ''}</Text>
               {/* 分隔 */}
               <View style={[styles.commentDivider, { borderTopColor: c.border }]}>
                 <Text style={[styles.commentDividerText, { color: c.textSecondary }]}>全部评论 ({comments.length})</Text>
