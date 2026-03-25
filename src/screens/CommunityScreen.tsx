@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   actionIconActive: { color: '#FF6B6B' },
   actionCount: { fontSize: 13, color: '#999' },
   actionCountActive: { color: '#FF6B6B' },
-  fab: { position: 'absolute', bottom: 28, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: '#4A90E2', justifyContent: 'center', alignItems: 'center', shadowColor: '#4A90E2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
+  fab: { position: 'absolute', bottom: 100, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: '#4A90E2', justifyContent: 'center', alignItems: 'center', shadowColor: '#4A90E2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
   fabText: { fontSize: 28, color: '#FFF', fontWeight: '300', marginTop: -2 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   modalCard: { borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, paddingBottom: 44 },
