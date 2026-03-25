@@ -517,6 +517,22 @@ export const isPostCollectedByUser = async (postId: string, userId: string): Pro
   return getPostCollects(postId, userId);
 };
 
+/** 批量取消收藏 */
+export const batchUncollect = async (postIds: string[], userId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    await Promise.all(postIds.map(async (postId) => {
+      const r = await app!.database().collection('favorites').where({ postId, userId }).get();
+      if (r.data?.[0]) {
+        await app!.database().collection('favorites').doc(r.data[0]._id).remove();
+      }
+    }));
+  } catch (err) {
+    console.error('[CloudBase] batchUncollect 失败:', err);
+    throw err;
+  }
+};
+
 // ========== 评论集合 ==========
 
 /** 发布评论 */

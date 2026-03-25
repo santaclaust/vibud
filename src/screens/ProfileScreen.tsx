@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
-import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts } from '../services/CloudBaseService';
+import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -60,7 +60,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
     const ids = Array.from(selectedFavorites);
     setLoadingFavorites(true);
     try {
-      await Promise.all(ids.map(id => toggleCollect(id, userId)));
+      await batchUncollect(ids, userId);
       setFavoritePosts(prev => prev.filter(p => !selectedFavorites.has(p._id)));
       setSelectedFavorites(new Set());
       setEditMode(false);
