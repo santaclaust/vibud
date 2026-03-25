@@ -451,25 +451,34 @@ const getPostLikes = async (postId: string, userId: string) => {
   return r.data?.length > 0;
 };
 
+/** 查询某用户是否收藏过某帖子 */
+const getPostCollects = async (postId: string, userId: string) => {
+  if (!initialized) await initCloudBase();
+  const r = await app!.database().collection('post_collects')
+    .where({ postId, userId }).limit(1).get();
+  return r.data?.length > 0;
+};
+
 /** 暖心（toggle）- 独立 post_likes 集合存记录，warmthCount 为计数器 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
     console.log('[CloudBase] toggleWarmth postId:', postId, 'userId:', userId);
     
+    // 始终用 CloudBase _id 作为 post_likes 的 postId
     const postR = await app!.database().collection('community_posts').doc(postId).get();
     if (!postR.data) throw new Error('帖子不存在');
     const post: any = postR.data;
+    const cloudBaseId = post._id; // CloudBase 真实 _id
     const inner = post.data || {};
     const currentCount = post.warmthCount ?? inner.warmthCount ?? 0;
     
-    const hasLiked = await getPostLikes(postId, userId);
-    console.log('[CloudBase] 已暖心:', hasLiked, '当前count:', currentCount);
+    const hasLiked = await getPostLikes(cloudBaseId, userId);
+    console.log('[CloudBase] 已暖心:', hasLiked, 'cloudBaseId:', cloudBaseId, '当前count:', currentCount);
     
     if (hasLiked) {
-      // 取消暖心：删 likes 记录，计数 -1
       const likeR = await app!.database().collection('post_likes')
-        .where({ postId, userId }).limit(1).get();
+        .where({ postId: cloudBaseId, userId }).limit(1).get();
       if (likeR.data?.[0]) {
         await app!.database().collection('post_likes').doc(likeR.data[0]._id).remove();
       }
@@ -477,8 +486,7 @@ export const toggleWarmth = async (postId: string, userId: string) => {
       await app!.database().collection('community_posts').doc(postId).update({ warmthCount: newCount });
       console.log('[CloudBase] 取消暖心成功 count:', newCount);
     } else {
-      // 暖心：加 likes 记录，计数 +1
-      await app!.database().collection('post_likes').add({ postId, userId, createdAt: Date.now() });
+      await app!.database().collection('post_likes').add({ postId: cloudBaseId, userId, createdAt: Date.now() });
       await app!.database().collection('community_posts').doc(postId).update({ warmthCount: currentCount + 1 });
       console.log('[CloudBase] 暖心成功 count:', currentCount + 1);
     }
@@ -488,31 +496,26 @@ export const toggleWarmth = async (postId: string, userId: string) => {
   }
 };
 
-/** 收藏（toggle）- 独立 post_collects 集合存记录 */
-const getPostCollects = async (postId: string, userId: string) => {
-  if (!initialized) await initCloudBase();
-  const r = await app!.database().collection('post_collects')
-    .where({ postId, userId }).limit(1).get();
-  return r.data?.length > 0;
-};
-
 export const toggleCollect = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleCollect postId:', postId, 'userId:', userId);
+    // 统一用 CloudBase _id
+    const postR = await app!.database().collection('community_posts').doc(postId).get();
+    if (!postR.data) throw new Error('帖子不存在');
+    const cloudBaseId = (postR.data as any)._id;
     
-    const hasCollected = await getPostCollects(postId, userId);
-    console.log('[CloudBase] 已收藏:', hasCollected);
+    const hasCollected = await getPostCollects(cloudBaseId, userId);
+    console.log('[CloudBase] toggleCollect cloudBaseId:', cloudBaseId, '已收藏:', hasCollected);
     
     if (hasCollected) {
       const r = await app!.database().collection('post_collects')
-        .where({ postId, userId }).limit(1).get();
+        .where({ postId: cloudBaseId, userId }).limit(1).get();
       if (r.data?.[0]) {
         await app!.database().collection('post_collects').doc(r.data[0]._id).remove();
       }
       console.log('[CloudBase] 取消收藏成功');
     } else {
-      await app!.database().collection('post_collects').add({ postId, userId, createdAt: Date.now() });
+      await app!.database().collection('post_collects').add({ postId: cloudBaseId, userId, createdAt: Date.now() });
       console.log('[CloudBase] 收藏成功');
     }
   } catch (err) {
