@@ -70,7 +70,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       const warmed = (post.warmedBy || []).includes(uid);
       const updated = { ...post, warmthCount: warmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1, warmedBy: warmed ? (post.warmedBy || []).filter((u: string) => u !== uid) : [...(post.warmedBy || []), uid] };
       syncPost(updated);
-      await toggleWarmth(postId, uid);
+      await toggleWarmth(post._id, uid);
     } catch (err) {
       syncPost(post);
       console.error('暖心失败:', err);
@@ -79,13 +79,12 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const handleCollect = async (post: any) => {
-    const postId = post.id || post._id;
-    if (!postId) { Alert.alert('帖子数据异常'); return; }
+    if (!post._id) { Alert.alert('帖子数据异常'); return; }
     try {
       const collected = (post.collectedBy || []).includes(uid);
       const updated = { ...post, collectedBy: collected ? (post.collectedBy || []).filter((u: string) => u !== uid) : [...(post.collectedBy || []), uid] };
       syncPost(updated);
-      await toggleCollect(postId, uid);
+      await toggleCollect(post._id, uid);
     } catch (err) {
       syncPost(post);
       console.error('收藏失败:', err);

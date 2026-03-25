@@ -428,31 +428,28 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 通过 id 字段精确查询，避免索引问题 */
-export const toggleWarmth = async (postId: string, userId: string, createdAt?: number) => {
+/** 暖心（toggle）- 直接用 _id 定位文档，不依赖 id 字段索引 */
+export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleWarmth:', { postId, createdAt, userId });
+    console.log('[CloudBase] toggleWarmth _id:', postId);
     
-    // 用自定义id字段查询（publishPost里存储的id）
-    const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-    console.log('[CloudBase] 查询结果:', JSON.stringify(r).slice(0, 300));
-    if (!r.data?.[0]) throw new Error('帖子不存在: ' + postId);
+    const r = await app!.database().collection('community_posts').doc(postId).get();
+    if (!r.data) throw new Error('帖子不存在: ' + postId);
     
-    const post: any = r.data[0];
-    const warmedBy = post.warmedBy || [];
+    const post: any = r.data;
+    // 解包：旧数据在 doc.data 里
+    const inner = post.data || post;
+    const warmthCount = inner.warmthCount ?? 0;
+    const warmedBy: string[] = inner.warmedBy || [];
     const hasWarmed = warmedBy.includes(userId);
-    const docId = String(post._id);
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'docId:', docId);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'count:', warmthCount);
     
-    if (!docId) throw new Error('无法获取文档ID');
-    
-    await app!.database().collection('community_posts').doc(docId).update({
-      warmthCount: hasWarmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1,
-      warmedBy: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
-      updatedAt: Date.now(),
+    await app!.database().collection('community_posts').doc(postId).update({
+      ['data.warmthCount']: hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1,
+      ['data.warmedBy']: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
     });
-    console.log('[CloudBase] 暖心更新成功');
+    console.log('[CloudBase] 暖心成功');
   } catch (err) {
     console.error('[CloudBase] toggleWarmth 失败:', err);
     throw err;
@@ -460,29 +457,24 @@ export const toggleWarmth = async (postId: string, userId: string, createdAt?: n
 };
 
 /** 收藏（toggle） */
-export const toggleCollect = async (postId: string, userId: string, createdAt?: number) => {
+export const toggleCollect = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleCollect:', { postId, userId });
+    console.log('[CloudBase] toggleCollect _id:', postId);
     
-    const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-    console.log('[CloudBase] 查询结果:', JSON.stringify(r).slice(0, 300));
+    const r = await app!.database().collection('community_posts').doc(postId).get();
+    if (!r.data) throw new Error('帖子不存在: ' + postId);
     
-    if (!r.data?.[0]) throw new Error('帖子不存在');
-    
-    const post: any = r.data[0];
-    const collectedBy = post.collectedBy || [];
+    const post: any = r.data;
+    const inner = post.data || post;
+    const collectedBy: string[] = inner.collectedBy || [];
     const hasCollected = collectedBy.includes(userId);
-    const docId = String(post._id);
-    console.log('[CloudBase] hasCollected:', hasCollected, 'docId:', docId);
+    console.log('[CloudBase] hasCollected:', hasCollected);
     
-    if (!docId) throw new Error('无法获取文档ID');
-    
-    await app!.database().collection('community_posts').doc(docId).update({
-      collectedBy: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
-      updatedAt: Date.now(),
+    await app!.database().collection('community_posts').doc(postId).update({
+      ['data.collectedBy']: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
     });
-    console.log('[CloudBase] 收藏更新成功');
+    console.log('[CloudBase] 收藏成功');
   } catch (err) {
     console.error('[CloudBase] toggleCollect 失败:', err);
     throw err;
