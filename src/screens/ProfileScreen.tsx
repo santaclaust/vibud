@@ -127,9 +127,9 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
       <Modal visible={showFavorites} transparent animationType="fade" onRequestClose={() => setShowFavorites(false)}>
         <View style={styles.favOverlay}>
           <View style={[styles.favCard, { backgroundColor: c.surface }]}>
-            <View style={styles.favHeader}>
-              <Text style={styles.favTitle}>★ 我的收藏</Text>
-              <TouchableOpacity onPress={() => setShowFavorites(false)}><Text style={styles.favClose}>关闭</Text></TouchableOpacity>
+            <View style={[styles.favHeader, { borderBottomColor: c.border }]}>
+              <Text style={[styles.favTitle, { color: c.text }]}>★ 我的收藏</Text>
+              <TouchableOpacity onPress={() => setShowFavorites(false)}><Text style={[styles.favClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
             </View>
             <ScrollView style={styles.favList}>
               {loadingFavorites ? (
@@ -138,11 +138,11 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                 <View style={styles.favEmpty}><Text style={{ color: c.textSecondary }}>还没有收藏内容</Text></View>
               ) : (
                 favoritePosts.map((post, i) => (
-                  <View key={post._id || i} style={styles.favItem}>
-                    <Text style={styles.favItemText} numberOfLines={2}>{post.text}</Text>
+                  <View key={post._id || i} style={[styles.favItem, { borderBottomColor: c.border }]}>
+                    <Text style={[styles.favItemText, { color: c.text }]} numberOfLines={2}>{post.text}</Text>
                     <View style={styles.favItemMeta}>
-                      <Text style={styles.favItemAuthor}>★ {post.authorName}</Text>
-                      <TouchableOpacity onPress={() => handleUncollect(post)}><Text style={styles.favItemUncollect}>取消收藏</Text></TouchableOpacity>
+                      <Text style={[styles.favItemAuthor, { color: c.textSecondary }]}>★ {post.authorName}</Text>
+                      <TouchableOpacity onPress={() => handleUncollect(post)}><Text style={[styles.favItemUncollect, { color: '#FF4757' }]}>取消收藏</Text></TouchableOpacity>
                     </View>
                   </View>
                 ))
@@ -218,17 +218,17 @@ const styles = StyleSheet.create({
   menuArrow: { fontSize: 18 },
   // 收藏弹窗
   favOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  favCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 0, marginHorizontal: 16, width: '90%', maxHeight: '70%', overflow: 'hidden' },
-  favHeader: { padding: 20, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  favTitle: { fontSize: 18, fontWeight: '600', color: '#1F1F1F' },
-  favClose: { fontSize: 15, color: '#999' },
+  favCard: { borderRadius: 20, padding: 0, marginHorizontal: 16, width: '90%', maxHeight: '70%', overflow: 'hidden' },
+  favHeader: { padding: 20, borderBottomWidth: 0.5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  favTitle: { fontSize: 18, fontWeight: '600' },
+  favClose: { fontSize: 15 },
   favList: { maxHeight: 400 },
   favEmpty: { alignItems: 'center', paddingVertical: 40 },
-  favItem: { padding: 16, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
-  favItemText: { fontSize: 14, color: '#333', lineHeight: 20 },
+  favItem: { padding: 16, borderBottomWidth: 0.5 },
+  favItemText: { fontSize: 14, lineHeight: 20 },
   favItemMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  favItemAuthor: { fontSize: 12, color: '#999' },
-  favItemUncollect: { fontSize: 12, color: '#FF4757' },
+  favItemAuthor: { fontSize: 12 },
+  favItemUncollect: { fontSize: 12 },
   // 情绪记忆弹窗
   emotionOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
   emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, marginHorizontal: 16, width: '90%', maxHeight: '70%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
