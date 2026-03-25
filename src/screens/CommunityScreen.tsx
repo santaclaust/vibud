@@ -208,8 +208,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                 </TouchableOpacity>
               ))}
             </View>
-            <TextInput style={[styles.modalInput, { color: c.text, backgroundColor: '#F7F7F7' }]}
-              placeholder="分享你的想法..." placeholderTextColor="#BFBFBF"
+            <TextInput style={[styles.modalInput, { color: c.text, backgroundColor: c.surface }]}
+              placeholder="分享你的想法..." placeholderTextColor={c.textSecondary}
               multiline maxLength={500} value={postText} onChangeText={setPostText} autoFocus />
             <Text style={[styles.charCount, { color: c.textSecondary }]}>{postText.length}/500</Text>
           </View>
@@ -282,8 +282,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
             />
           )}
           <View style={[styles.commentInputWrap, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-            <TextInput style={[styles.commentInput, { backgroundColor: '#F2F2F2', color: c.text }]}
-              placeholder="说点什么..." placeholderTextColor="#999" value={commentText}
+            <TextInput style={[styles.commentInput, { backgroundColor: c.background, color: c.text }]}
+              placeholder="说点什么..." placeholderTextColor={c.textSecondary} value={commentText}
               onChangeText={setCommentText} maxLength={200} />
             <TouchableOpacity style={[styles.commentSendBtn, { backgroundColor: commentText.trim() ? c.primary : '#CCC' }]}
               onPress={handleSendComment} disabled={!commentText.trim()}>
@@ -340,8 +340,8 @@ const styles = StyleSheet.create({
   modalSectionLabel: { fontSize: 12, marginBottom: 10 },
   modalCatRow: { flexDirection: 'row', marginBottom: 16, gap: 8, flexWrap: 'wrap', maxWidth: '100%' },
   modalCatTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
-  modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top' },
-  charCount: { textAlign: 'right', fontSize: 12, marginTop: 8 },
+  modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: '#E5E5E5' },
+  charCount: { textAlign: 'right', fontSize: 12, marginTop: 8, color: '#999' },
   commentModal: { flex: 1 },
   commentHeader: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 0.5 },
   commentHeaderTitle: { fontSize: 16, fontWeight: '600' },
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11 },
   commentEmpty: { alignItems: 'center', paddingVertical: 30 },
   commentInputWrap: { flexDirection: 'row', alignItems: 'center', padding: 12, borderTopWidth: 0.5, gap: 10 },
-  commentInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, fontSize: 14 },
+  commentInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#E5E5E5' },
   commentSendBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
   commentSendBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
 });
