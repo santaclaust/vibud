@@ -172,7 +172,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
         </View>
       ) : (
         <FlatList data={posts} renderItem={renderPost}
-          keyExtractor={item => item._id || item.id || String(item.createdAt)}
+          keyExtractor={(item, index) => `post_${item._id || item.id || item.createdAt}_${index}`}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.textSecondary} />}
         />
@@ -221,7 +221,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
           {commentPost && (
             <FlatList
               data={[{ ...commentPost, isOriginalPost: true }, ...comments.map((c: any) => ({ ...c, isOriginalPost: false }))]}
-              keyExtractor={(item: any) => item.isOriginalPost ? 'post_' + item.id : item.id}
+              keyExtractor={(item: any, index: number) => `comment_${item._id || item.id || item.createdAt}_${index}`}
               contentContainerStyle={{ paddingBottom: 20 }}
               ListHeaderComponent={
                 <View style={[styles.commentPostCard, { backgroundColor: c.surface }]}>
