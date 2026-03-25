@@ -399,11 +399,16 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
     const res = await queryDocuments(
       'community_posts',
       category && category !== '全部' ? { category } : undefined,
-      undefined, // 暂不排序，避免需要索引
+      undefined,
       limitCount
     );
-    // 按时间倒序（前端排序）
-    const data = res.data || [];
+    console.log('[CloudBase] getCommunityPosts 返回条数:', res.data?.length, '首条keys:', Object.keys(res.data?.[0] || {}));
+    // CloudBase返回_id（系统字段）规范化为id，保证UI和toggle都能用
+    const data = (res.data || []).map((doc: any) => {
+      const normalized = { ...doc, id: doc.id || doc._id };
+      console.log('[CloudBase] 规范化后 id:', normalized.id, '_id:', normalized._id);
+      return normalized;
+    });
     return data.sort((a: any, b: any) => b.createdAt - a.createdAt);
   } catch (err) {
     console.error('[CloudBase] getCommunityPosts 失败:', err);
@@ -417,11 +422,10 @@ export const toggleWarmth = async (postId: string, userId: string, createdAt?: n
     if (!initialized) await initCloudBase();
     console.log('[CloudBase] toggleWarmth:', { postId, createdAt, userId });
     
-    // 用 id 字段查询（idx_id 索引已建）
+    // 用自定义id字段查询（publishPost里存储的id）
     const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
     console.log('[CloudBase] 查询结果:', JSON.stringify(r).slice(0, 300));
-    
-    if (!r.data?.[0]) throw new Error('帖子不存在');
+    if (!r.data?.[0]) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data[0];
     const warmedBy = post.warmedBy || [];
