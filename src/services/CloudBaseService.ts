@@ -404,9 +404,10 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
     if (!initialized) await initCloudBase();
     let q = app!.database().collection('community_posts');
-    if (category && category !== '全部') {
-      q = q.where({ category });
-    }
+    // 临时去掉where测试：直接查全部，不加任何过滤
+    // if (category && category !== '全部') {
+    //   q = q.where({ category });
+    // }
     const r = await q.limit(limitCount).get();
     console.log('[CloudBase] getCommunityPosts raw:', JSON.stringify(r).slice(0, 500));
     const docs = r.data || [];

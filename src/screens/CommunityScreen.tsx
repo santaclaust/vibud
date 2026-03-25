@@ -31,9 +31,11 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const [comments, setComments] = useState<any[]>([]);
 
   const fetchPosts = useCallback(async () => {
+    setLoading(true);
     try {
       const category = activeCategory === '全部' ? undefined : activeCategory;
       const data = await getCommunityPosts(category, 100);
+      console.log('[Community] fetchPosts 返回条数:', data.length, '首条:', JSON.stringify(data[0])?.slice(0, 200));
       setPosts(data);
     } catch (err) { console.error('获取帖子失败:', err); }
     finally { setLoading(false); setRefreshing(false); }
