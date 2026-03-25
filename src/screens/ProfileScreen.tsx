@@ -35,6 +35,44 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   const [showFavorites, setShowFavorites] = useState(false);
   const [favoritePosts, setFavoritePosts] = useState<any[]>([]);
   const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [selectedFavorites, setSelectedFavorites] = useState<Set<string>>(new Set());
+  const [editMode, setEditMode] = useState(false);
+
+  const toggleSelectFavorite = (postId: string) => {
+    setSelectedFavorites(prev => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFavorites.size === favoritePosts.length) {
+      setSelectedFavorites(new Set());
+    } else {
+      setSelectedFavorites(new Set(favoritePosts.map(p => p._id)));
+    }
+  };
+
+  const handleBatchUncollect = async () => {
+    if (!userId || selectedFavorites.size === 0) return;
+    const ids = Array.from(selectedFavorites);
+    setLoadingFavorites(true);
+    try {
+      await Promise.all(ids.map(id => toggleCollect(id, userId)));
+      setFavoritePosts(prev => prev.filter(p => !selectedFavorites.has(p._id)));
+      setSelectedFavorites(new Set());
+      setEditMode(false);
+    } catch (err) { console.error('批量取消收藏失败:', err); }
+    finally { setLoadingFavorites(false); }
+  };
+
+  const handleCloseFavorites = () => {
+    setShowFavorites(false);
+    setSelectedFavorites(new Set());
+    setEditMode(false);
+  };
 
   const handleMenuPress = (itemId: string) => {
     if (itemId === 'emotion') { openEmotionMemory(); }
@@ -126,12 +164,35 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
       </ScrollView>
 
       {/* 收藏弹窗 */}
-      <Modal visible={showFavorites} transparent animationType="fade" onRequestClose={() => setShowFavorites(false)}>
+      <Modal visible={showFavorites} transparent animationType="fade" onRequestClose={handleCloseFavorites}>
         <View style={styles.favOverlay}>
           <View style={[styles.favCard, { backgroundColor: c.surface }]}>
             <View style={[styles.favHeader, { borderBottomColor: c.border }]}>
-              <Text style={[styles.favTitle, { color: c.text }]}>★ 我的收藏</Text>
-              <TouchableOpacity onPress={() => setShowFavorites(false)}><Text style={[styles.favClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
+              {editMode ? (
+                <>
+                  <TouchableOpacity onPress={toggleSelectAll}>
+                    <Text style={{ color: c.primary, fontSize: 15 }}>{selectedFavorites.size === favoritePosts.length ? '取消全选' : '全选'}</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.favTitle, { color: c.text }]}>{selectedFavorites.size}/{favoritePosts.length} 已选</Text>
+                  <TouchableOpacity onPress={handleBatchUncollect} disabled={selectedFavorites.size === 0}>
+                    <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15, fontWeight: '600' }}>
+                      取消收藏{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.favTitle, { color: c.text }]}>★ 我的收藏</Text>
+                  <View style={{ flexDirection: 'row', gap: 16 }}>
+                    {favoritePosts.length > 0 && (
+                      <TouchableOpacity onPress={() => setEditMode(true)}>
+                        <Text style={{ color: c.primary, fontSize: 15 }}>编辑</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={handleCloseFavorites}><Text style={[styles.favClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
             <ScrollView style={styles.favList}>
               {loadingFavorites ? (
@@ -139,15 +200,29 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
               ) : favoritePosts.length === 0 ? (
                 <View style={styles.favEmpty}><Text style={{ color: c.textSecondary }}>还没有收藏内容</Text></View>
               ) : (
-                favoritePosts.map((post, i) => (
-                  <View key={post._id || i} style={[styles.favItem, { borderBottomColor: c.border }]}>
-                    <Text style={[styles.favItemText, { color: c.text }]} numberOfLines={2}>{post.text}</Text>
-                    <View style={styles.favItemMeta}>
-                      <Text style={[styles.favItemAuthor, { color: c.textSecondary }]}>★ {post.authorName}</Text>
-                      <TouchableOpacity onPress={() => handleUncollect(post)}><Text style={[styles.favItemUncollect, { color: '#FF4757' }]}>取消收藏</Text></TouchableOpacity>
+                favoritePosts.map((post, i) => {
+                  const checked = selectedFavorites.has(post._id);
+                  return (
+                    <View key={post._id || i} style={[styles.favItem, { borderBottomColor: c.border }]}>
+                      {editMode ? (
+                        <TouchableOpacity style={styles.favCheckbox} onPress={() => toggleSelectFavorite(post._id)}>
+                          <Text style={{ fontSize: 18, color: checked ? c.primary : c.textSecondary }}>{checked ? '☑' : '☐'}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <View style={styles.favItemContent}>
+                        <Text style={[styles.favItemText, { color: c.text }]} numberOfLines={2}>{post.text}</Text>
+                        <View style={styles.favItemMeta}>
+                          <Text style={[styles.favItemAuthor, { color: c.textSecondary }]}>★ {post.authorName}</Text>
+                          {!editMode && (
+                            <TouchableOpacity onPress={() => { if (userId) toggleCollect(post._id, userId); setFavoritePosts(prev => prev.filter(p => p._id !== post._id)); }}>
+                              <Text style={[styles.favItemUncollect, { color: '#FF4757' }]}>取消收藏</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </ScrollView>
           </View>
@@ -231,6 +306,8 @@ const styles = StyleSheet.create({
   favItemMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   favItemAuthor: { fontSize: 12 },
   favItemUncollect: { fontSize: 12 },
+  favCheckbox: { marginRight: 10 },
+  favItemContent: { flex: 1 },
   // 情绪记忆弹窗
   emotionOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
   emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, marginHorizontal: 16, width: '90%', maxHeight: '70%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
