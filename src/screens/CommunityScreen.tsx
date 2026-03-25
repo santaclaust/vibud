@@ -136,30 +136,30 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const isCollected = (post: any) => post._collected || false;
 
   const renderPost = ({ item }: { item: any }) => (
-    <View style={styles.postCard}>
+    <View style={[styles.postCard, { backgroundColor: c.surface }]}>
       <View style={styles.postHeader}>
         <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
         <View style={styles.authorInfo}>
           <Text style={[styles.authorName, { color: c.text }]}>{item.authorName}</Text>
-          <Text style={styles.postMeta}>{formatTime(item.createTime)}</Text>
+          <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
         </View>
         <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[item.category] || '#F5F5F5' }]}>
           <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[item.category] || '#666' }]}>{item.category}</Text>
         </View>
       </View>
       <Text style={[styles.postText, { color: c.text }]}>{item.text}</Text>
-      <View style={styles.actionBar}>
+      <View style={[styles.actionBar, { borderTopColor: c.border }]}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(item)}>
           <Text style={[styles.actionIcon, isWarmed(item) && styles.actionIconRed]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
-          <Text style={[styles.actionCount, isWarmed(item) && styles.actionCountRed]}>{item.likeCount || 0}</Text>
+          <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(item) && styles.actionCountRed]}>{item.likeCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(item)}>
           <Text style={styles.actionIcon}>💬</Text>
-          <Text style={styles.actionCount}>{item.commentCount || 0}</Text>
+          <Text style={[styles.actionCount, { color: c.textSecondary }]}>{item.commentCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('转发功能', '开发中')}>
           <Text style={styles.actionIcon}>🔄</Text>
-          <Text style={styles.actionCount}>{item.shareCount || 0}</Text>
+          <Text style={[styles.actionCount, { color: c.textSecondary }]}>{item.shareCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => handleCollect(item)}>
           <Text style={[styles.actionIcon, isCollected(item) && styles.actionIconYellow]}>{isCollected(item) ? '★' : '☆'}</Text>
@@ -174,10 +174,10 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Text style={[styles.headerTitle, { color: c.text }]}>社群</Text>
       </View>
-      <View style={styles.categoryWrap}>
+      <View style={[styles.categoryWrap, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
           {CATEGORIES.map(cat => (
-            <TouchableOpacity key={cat} style={[styles.catTag, { backgroundColor: activeCategory === cat ? CATEGORY_COLORS[cat] : '#FFF', borderColor: CATEGORY_COLORS[cat] }]} onPress={() => setActiveCategory(cat)}>
+            <TouchableOpacity key={cat} style={[styles.catTag, { backgroundColor: activeCategory === cat ? CATEGORY_COLORS[cat] : c.surface, borderColor: CATEGORY_COLORS[cat] }]} onPress={() => setActiveCategory(cat)}>
               <Text style={[styles.catTagText, { color: activeCategory === cat ? '#FFF' : CATEGORY_COLORS[cat] }]}>{cat}</Text>
             </TouchableOpacity>
           ))}
@@ -190,7 +190,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
           <Text style={[styles.emptyText, { color: c.text }]}>还没有帖子</Text>
           <Text style={[styles.emptySub, { color: c.textSecondary }]}>成为第一个分享的人吧</Text>
           <TouchableOpacity style={[styles.emptyBtn, { backgroundColor: c.primary }]} onPress={() => setShowPostModal(true)}>
-            <Text style={styles.emptyBtnText}>发布帖子</Text>
+            <Text style={[styles.emptyBtnText, { color: '#FFF' }]}>发布帖子</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -247,30 +247,30 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
               keyExtractor={(item: any, index: number) => `comment_${item._id || item.id || item.createTime}_${index}`}
               contentContainerStyle={{ paddingBottom: 20 }}
               ListHeaderComponent={
-                <View style={[styles.commentPostCard, { backgroundColor: c.surface }]}>
+                <View style={[styles.commentPostCard, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
                   <View style={styles.postHeader}>
                     <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
                     <View style={styles.authorInfo}>
                       <Text style={[styles.authorName, { color: c.text }]}>{commentPost.authorName}</Text>
-                      <Text style={styles.postMeta}>{formatTime(commentPost.createTime)}</Text>
+                      <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(commentPost.createTime)}</Text>
                     </View>
                     <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[commentPost.category] || '#F5F5F5' }]}>
                       <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[commentPost.category] || '#666' }]}>{commentPost.category}</Text>
                     </View>
                   </View>
                   <Text style={[styles.postText, { color: c.text }]}>{commentPost.text}</Text>
-                  <View style={styles.actionBar}>
+                  <View style={[styles.actionBar, { borderTopColor: c.border }]}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(commentPost)}>
                       <Text style={[styles.actionIcon, isWarmed(commentPost) && styles.actionIconRed]}>{isWarmed(commentPost) ? '❤️' : '🤍'}</Text>
-                      <Text style={[styles.actionCount, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.likeCount || 0}</Text>
+                      <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.likeCount || 0}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(commentPost)}>
                       <Text style={styles.actionIcon}>💬</Text>
-                      <Text style={styles.actionCount}>{commentPost.commentCount || 0}</Text>
+                      <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.commentCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('转发功能', '开发中')}>
                       <Text style={styles.actionIcon}>🔄</Text>
-                      <Text style={styles.actionCount}>{commentPost.shareCount || 0}</Text>
+                      <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.shareCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => handleCollect(commentPost)}>
                       <Text style={[styles.actionIcon, isCollected(commentPost) && styles.actionIconYellow]}>{isCollected(commentPost) ? '★' : '☆'}</Text>
@@ -315,9 +315,9 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { height: 48, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' },
+  header: { height: 48, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 0.5 },
   headerTitle: { fontSize: 17, fontWeight: '600' },
-  categoryWrap: { paddingVertical: 10, backgroundColor: '#FFF', borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' },
+  categoryWrap: { paddingVertical: 10, borderBottomWidth: 0.5 },
   catTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 14, borderWidth: 1, marginRight: 8 },
   catTagText: { fontSize: 13, fontWeight: '500' },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -326,24 +326,24 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 17, fontWeight: '600', marginBottom: 6 },
   emptySub: { fontSize: 14, marginBottom: 24 },
   emptyBtn: { paddingHorizontal: 28, paddingVertical: 10, borderRadius: 20 },
-  emptyBtnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
-  postCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
+  emptyBtnText: { fontSize: 15, fontWeight: '600' },
+  postCard: { borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
   postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   avatarWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontSize: 18 },
   authorInfo: { flex: 1, marginLeft: 10 },
   authorName: { fontSize: 14, fontWeight: '600' },
-  postMeta: { fontSize: 11, color: '#999', marginTop: 1 },
+  postMeta: { fontSize: 11, marginTop: 1 },
   categoryTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   categoryTagText: { fontSize: 11, fontWeight: '600' },
   postText: { fontSize: 15, lineHeight: 22, marginBottom: 12 },
-  actionBar: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 0.5, borderTopColor: '#F0F0F0', paddingTop: 10 },
+  actionBar: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 0.5, paddingTop: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
   actionBtnRight: { marginRight: 0, marginLeft: 'auto' },
   actionIcon: { fontSize: 16, marginRight: 4 },
   actionIconRed: { color: '#FF4757' },
   actionIconYellow: { color: '#FFD700' },
-  actionCount: { fontSize: 13, color: '#999' },
+  actionCount: { fontSize: 13 },
   actionCountRed: { color: '#FF4757' },
   actionCountYellow: { color: '#FFD700' },
   fab: { position: 'absolute', bottom: 85, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: '#4A90E2', justifyContent: 'center', alignItems: 'center', shadowColor: '#4A90E2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
@@ -357,12 +357,12 @@ const styles = StyleSheet.create({
   modalSectionLabel: { fontSize: 12, marginBottom: 10 },
   modalCatRow: { flexDirection: 'row', marginBottom: 16, gap: 8, flexWrap: 'wrap', maxWidth: '100%' },
   modalCatTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
-  modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: '#E5E5E5' },
-  charCount: { textAlign: 'right', fontSize: 12, marginTop: 8, color: '#999' },
+  modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top', borderWidth: 1 },
+  charCount: { textAlign: 'right', fontSize: 12, marginTop: 8 },
   commentModal: { flex: 1 },
   commentHeader: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 0.5 },
   commentHeaderTitle: { fontSize: 16, fontWeight: '600' },
-  commentPostCard: { padding: 16, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' },
+  commentPostCard: { padding: 16, borderBottomWidth: 0.5 },
   commentDivider: { paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 0.5, marginTop: 0 },
   commentDividerText: { fontSize: 12, fontWeight: '600' },
   commentItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 0.5 },
