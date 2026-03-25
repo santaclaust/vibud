@@ -137,7 +137,7 @@ export const getDocument = async (collName: string, docId: string) => {
  */
 export const updateDocument = async (collName: string, docId: string, data: object) => {
   if (!initialized) await initCloudBase();
-  const result = await app!.database().collection(collName).doc(docId).update({ data });
+  const result = await app!.database().collection(collName).doc(docId).update(data);
   console.log('[CloudBase] updateDocument result:', JSON.stringify(result));
   return result;
 };
@@ -411,29 +411,32 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle） */
+/** 暖心（toggle）- 直接用 database API 避免 orderBy 索引问题 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
-    console.log('[CloudBase] toggleWarmth 开始:', { postId, userId });
-    const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
-    console.log('[CloudBase] 查询结果:', JSON.stringify(posts));
-    if (!posts.data?.[0]) {
+    if (!initialized) await initCloudBase();
+    console.log('[CloudBase] toggleWarmth:', postId, userId);
+    
+    // 直接查询，不用 queryDocuments 包装
+    const result = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+    console.log('[CloudBase] 查询结果:', JSON.stringify(result));
+    
+    if (!result.data || result.data.length === 0) {
       console.error('[CloudBase] 未找到帖子:', postId);
       throw new Error('帖子不存在');
     }
-    const post = posts.data[0] as CommunityPost;
-    console.log('[CloudBase] 找到帖子, _id:', post._id, 'warmedBy:', post.warmedBy);
+    
+    const post = result.data[0] as CommunityPost;
     const warmedBy = post.warmedBy || [];
     const hasWarmed = warmedBy.includes(userId);
-    console.log('[CloudBase] hasWarmed:', hasWarmed);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'warmedBy:', warmedBy);
     
-    const result = await updateDocument('community_posts', post._id!, {
+    await app!.database().collection('community_posts').doc(post._id).update({
       warmthCount: hasWarmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1,
       warmedBy: hasWarmed ? warmedBy.filter(u => u !== userId) : [...warmedBy, userId],
       updatedAt: Date.now(),
     });
-    console.log('[CloudBase] 更新结果:', JSON.stringify(result));
-    return result;
+    console.log('[CloudBase] 暖心更新成功');
   } catch (err) {
     console.error('[CloudBase] toggleWarmth 失败:', err);
     throw err;
@@ -443,25 +446,27 @@ export const toggleWarmth = async (postId: string, userId: string) => {
 /** 收藏（toggle） */
 export const toggleCollect = async (postId: string, userId: string) => {
   try {
-    console.log('[CloudBase] toggleCollect 开始:', { postId, userId });
-    const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
-    console.log('[CloudBase] 查询结果:', JSON.stringify(posts));
-    if (!posts.data?.[0]) {
+    if (!initialized) await initCloudBase();
+    console.log('[CloudBase] toggleCollect:', postId, userId);
+    
+    const result = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+    console.log('[CloudBase] 查询结果:', JSON.stringify(result));
+    
+    if (!result.data || result.data.length === 0) {
       console.error('[CloudBase] 未找到帖子:', postId);
       throw new Error('帖子不存在');
     }
-    const post = posts.data[0] as CommunityPost;
-    console.log('[CloudBase] 找到帖子, _id:', post._id, 'collectedBy:', post.collectedBy);
+    
+    const post = result.data[0] as CommunityPost;
     const collectedBy = post.collectedBy || [];
     const hasCollected = collectedBy.includes(userId);
     console.log('[CloudBase] hasCollected:', hasCollected);
     
-    const result = await updateDocument('community_posts', post._id!, {
+    await app!.database().collection('community_posts').doc(post._id).update({
       collectedBy: hasCollected ? collectedBy.filter(u => u !== userId) : [...collectedBy, userId],
       updatedAt: Date.now(),
     });
-    console.log('[CloudBase] 更新结果:', JSON.stringify(result));
-    return result;
+    console.log('[CloudBase] 收藏更新成功');
   } catch (err) {
     console.error('[CloudBase] toggleCollect 失败:', err);
     throw err;
