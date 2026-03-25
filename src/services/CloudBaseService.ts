@@ -94,7 +94,7 @@ export const onAuthStateChange = (callback: (user: any) => void) => {
  */
 export const addDocument = async (collName: string, data: object) => {
   if (!initialized) await initCloudBase();
-  // 直接传对象，不用 { data: {} } 包装（避免查询返回 doc.data.xxx 嵌套）
+  // 直接传对象存顶层字段（扁平结构），查询返回即 doc.field（非 doc.data.field）
   return await app!.database().collection(collName).add(data);
 };
 
@@ -414,12 +414,10 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
     const docs = r.data || [];
     console.log('[CloudBase] getCommunityPosts 条数:', docs.length);
     const data = docs.map((doc: any) => {
-      // CloudBase add后查询返回格式：实际字段在 data 字段内（嵌套结构）
-      // 需要解包：doc.data.{fields} → flat.{fields}
-      const inner = doc.data || doc;
-      const id = inner.id || doc._id || '';
-      console.log('[CloudBase] doc id:', id, 'text:', inner.text?.slice(0, 20));
-      return { ...inner, _id: doc._id, id, docId: id };
+      // 扁平结构：所有字段在 doc 顶层（add时直接传对象，不用data包装）
+      const id = doc.id || doc._id || '';
+      console.log('[CloudBase] doc _id:', doc._id, 'id:', id, 'text:', doc.text?.slice(0, 20), 'warmedBy:', doc.warmedBy);
+      return { ...doc, id, docId: id };
     });
     return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (err) {
@@ -428,7 +426,7 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 直接用 _id 定位文档，不依赖 id 字段索引 */
+/** 暖心（toggle）- 用 _id 直接定位，字段存顶层 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
@@ -438,16 +436,14 @@ export const toggleWarmth = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    // 解包：旧数据在 doc.data 里
-    const inner = post.data || post;
-    const warmthCount = inner.warmthCount ?? 0;
-    const warmedBy: string[] = inner.warmedBy || [];
+    const warmthCount = post.warmthCount ?? 0;
+    const warmedBy: string[] = post.warmedBy || [];
     const hasWarmed = warmedBy.includes(userId);
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'count:', warmthCount);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'count:', warmthCount, 'warmedBy:', warmedBy);
     
     await app!.database().collection('community_posts').doc(postId).update({
-      ['data.warmthCount']: hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1,
-      ['data.warmedBy']: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
+      warmthCount: hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1,
+      warmedBy: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
     });
     console.log('[CloudBase] 暖心成功');
   } catch (err) {
@@ -466,13 +462,12 @@ export const toggleCollect = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    const inner = post.data || post;
-    const collectedBy: string[] = inner.collectedBy || [];
+    const collectedBy: string[] = post.collectedBy || [];
     const hasCollected = collectedBy.includes(userId);
-    console.log('[CloudBase] hasCollected:', hasCollected);
+    console.log('[CloudBase] hasCollected:', hasCollected, 'collectedBy:', collectedBy);
     
     await app!.database().collection('community_posts').doc(postId).update({
-      ['data.collectedBy']: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
+      collectedBy: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
     });
     console.log('[CloudBase] 收藏成功');
   } catch (err) {

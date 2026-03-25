@@ -72,9 +72,11 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
 
   const handleUncollect = async (post: any) => {
     const uid = userId || 'guest';
+    const docId = post._id || post.id;
+    if (!docId) return;
     try {
-      await toggleCollect(post.id, uid);
-      setFavoritePosts(prev => prev.filter(p => p.id !== post.id));
+      await toggleCollect(docId, uid);
+      setFavoritePosts(prev => prev.filter(p => (p._id || p.id) !== docId));
     } catch (err) {
       console.error('取消收藏失败:', err);
     }
