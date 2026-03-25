@@ -120,7 +120,7 @@ export const queryDocuments = async (
       q = q.orderBy(o.field, o.order);
     });
   } else {
-    q = q.orderBy('createdAt', 'desc');
+    q = q.orderBy('createTime', 'desc');
   }
   
   return await q.limit(limitCount).get();
@@ -200,13 +200,11 @@ export interface CommunityPost {
   authorAvatar?: string;
   text: string;
   category: string;
-  warmthCount: number;
-  warmedBy: string[];
+  likeCount: number;
   commentCount: number;
   shareCount: number;
-  collectedBy: string[];
-  createdAt: number;
-  updatedAt: number;
+  createTime: number;
+  updateTime: number;
 }
 
 export interface TimeMachineEntry {
@@ -380,24 +378,19 @@ export const publishPost = async (post: {
   authorName: string;
   text: string;
   category: string;
-}): Promise<{ id: string; docId: string }> => {
-  const id = 'post_' + Date.now();
-  const createdAt = Date.now();
+}): Promise<{ docId: string }> => {
+  const createTime = Date.now();
   const r: any = await addDocument('community_posts', {
     ...post,
-    id,
-    warmthCount: 0,
-    warmedBy: [],
+    likeCount: 0,
     commentCount: 0,
     shareCount: 0,
-    collectedBy: [],
-    createdAt,
-    updatedAt: createdAt,
+    createTime,
+    updateTime: createTime,
   });
-  // CloudBase add返回的id字段就是内置_cloudbase_id
   const docId = r?.id || '';
-  console.log('[CloudBase] publishPost 自定义id:', id, 'CloudBase _id:', docId);
-  return { id, docId };
+  console.log('[CloudBase] publishPost CloudBase _id:', docId);
+  return { docId };
 };
 
 /** 获取社群帖子列表（按分类或全部） - 不含用户点赞/收藏状态（状态独立查询） */
@@ -409,17 +402,20 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
     const docs = r.data || [];
     const data = docs.map((doc: any) => {
       const inner = doc.data || {};
-      const warmthCount = doc.warmthCount ?? inner.warmthCount ?? 0;
-      const id = doc.id || doc._id || '';
+      const likeCount = doc.likeCount ?? inner.likeCount ?? 0;
+      const commentCount = doc.commentCount ?? inner.commentCount ?? 0;
+      const shareCount = doc.shareCount ?? inner.shareCount ?? 0;
+      const _id = doc._id || '';
       return {
         ...doc,
         ...inner,
-        id,
-        docId: id,
-        warmthCount,
+        _id,
+        likeCount,
+        commentCount,
+        shareCount,
       };
     });
-    return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+    return data.sort((a: any, b: any) => (b.createTime || 0) - (a.createTime || 0));
   } catch (err) {
     console.error('[CloudBase] getCommunityPosts 失败:', err);
     return [];
@@ -431,8 +427,8 @@ export const getUserPostStates = async (postIds: string[], userId: string) => {
   if (!initialized) await initCloudBase();
   try {
     const [likeR, collectR] = await Promise.all([
-      app!.database().collection('post_likes').where({ userId }).get(),
-      app!.database().collection('post_collects').where({ userId }).get(),
+      app!.database().collection('likes').where({ userId }).get(),
+      app!.database().collection('favorites').where({ userId }).get(),
     ]);
     const likedSet = new Set((likeR.data || []).map((d: any) => d.postId));
     const collectedSet = new Set((collectR.data || []).map((d: any) => d.postId));
@@ -445,7 +441,7 @@ export const getUserPostStates = async (postIds: string[], userId: string) => {
 /** 查询某用户是否暖心过某帖子 - 独立 likes 集合，不再存数组 */
 const getPostLikes = async (postId: string, userId: string) => {
   if (!initialized) await initCloudBase();
-  const r = await app!.database().collection('post_likes')
+  const r = await app!.database().collection('likes')
     .where({ postId, userId })
     .limit(1).get();
   return r.data?.length > 0;
@@ -454,41 +450,34 @@ const getPostLikes = async (postId: string, userId: string) => {
 /** 查询某用户是否收藏过某帖子 */
 const getPostCollects = async (postId: string, userId: string) => {
   if (!initialized) await initCloudBase();
-  const r = await app!.database().collection('post_collects')
+  const r = await app!.database().collection('favorites')
     .where({ postId, userId }).limit(1).get();
   return r.data?.length > 0;
 };
 
-/** 暖心（toggle）- 独立 post_likes 集合存记录，warmthCount 为计数器 */
+/** 暖心（toggle）- likes 集合存记录，likeCount 为计数器 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleWarmth postId:', postId, 'userId:', userId);
-    
-    // 始终用 CloudBase _id 作为 post_likes 的 postId
-    const postR = await app!.database().collection('community_posts').doc(postId).get();
+    const cloudBaseId = postId; // 传入的 postId 就是 CloudBase _id
+    const postR = await app!.database().collection('community_posts').doc(cloudBaseId).get();
     if (!postR.data) throw new Error('帖子不存在');
     const post: any = postR.data;
-    const cloudBaseId = post._id; // CloudBase 真实 _id
     const inner = post.data || {};
-    const currentCount = post.warmthCount ?? inner.warmthCount ?? 0;
+    const currentCount = post.likeCount ?? inner.likeCount ?? 0;
     
     const hasLiked = await getPostLikes(cloudBaseId, userId);
-    console.log('[CloudBase] 已暖心:', hasLiked, 'cloudBaseId:', cloudBaseId, '当前count:', currentCount);
     
     if (hasLiked) {
-      const likeR = await app!.database().collection('post_likes')
+      const likeR = await app!.database().collection('likes')
         .where({ postId: cloudBaseId, userId }).limit(1).get();
       if (likeR.data?.[0]) {
-        await app!.database().collection('post_likes').doc(likeR.data[0]._id).remove();
+        await app!.database().collection('likes').doc(likeR.data[0]._id).remove();
       }
-      const newCount = Math.max(0, currentCount - 1);
-      await app!.database().collection('community_posts').doc(postId).update({ warmthCount: newCount });
-      console.log('[CloudBase] 取消暖心成功 count:', newCount);
+      await app!.database().collection('community_posts').doc(cloudBaseId).update({ likeCount: Math.max(0, currentCount - 1) });
     } else {
-      await app!.database().collection('post_likes').add({ postId: cloudBaseId, userId, createdAt: Date.now() });
-      await app!.database().collection('community_posts').doc(postId).update({ warmthCount: currentCount + 1 });
-      console.log('[CloudBase] 暖心成功 count:', currentCount + 1);
+      await app!.database().collection('likes').add({ postId: cloudBaseId, userId, createTime: Date.now() });
+      await app!.database().collection('community_posts').doc(cloudBaseId).update({ likeCount: currentCount + 1 });
     }
   } catch (err) {
     console.error('[CloudBase] toggleWarmth 失败:', err);
@@ -499,24 +488,18 @@ export const toggleWarmth = async (postId: string, userId: string) => {
 export const toggleCollect = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    // 统一用 CloudBase _id
-    const postR = await app!.database().collection('community_posts').doc(postId).get();
-    if (!postR.data) throw new Error('帖子不存在');
-    const cloudBaseId = (postR.data as any)._id;
+    const cloudBaseId = postId;
     
     const hasCollected = await getPostCollects(cloudBaseId, userId);
-    console.log('[CloudBase] toggleCollect cloudBaseId:', cloudBaseId, '已收藏:', hasCollected);
     
     if (hasCollected) {
-      const r = await app!.database().collection('post_collects')
+      const r = await app!.database().collection('favorites')
         .where({ postId: cloudBaseId, userId }).limit(1).get();
       if (r.data?.[0]) {
-        await app!.database().collection('post_collects').doc(r.data[0]._id).remove();
+        await app!.database().collection('favorites').doc(r.data[0]._id).remove();
       }
-      console.log('[CloudBase] 取消收藏成功');
     } else {
-      await app!.database().collection('post_collects').add({ postId: cloudBaseId, userId, createdAt: Date.now() });
-      console.log('[CloudBase] 收藏成功');
+      await app!.database().collection('favorites').add({ postId: cloudBaseId, userId, createTime: Date.now() });
     }
   } catch (err) {
     console.error('[CloudBase] toggleCollect 失败:', err);

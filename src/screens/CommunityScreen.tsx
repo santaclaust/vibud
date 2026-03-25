@@ -75,8 +75,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const syncPost = (updated: any) => {
-    setPosts((prev: any[]) => prev.map((p: any) => p.id === updated.id ? updated : p));
-    if (commentPost && commentPost.id === updated.id) setCommentPost(updated);
+    setPosts((prev: any[]) => prev.map((p: any) => p._id === updated._id ? updated : p));
+    if (commentPost && commentPost._id === updated._id) setCommentPost(updated);
   };
 
   const handleWarmth = async (post: any) => {
@@ -84,8 +84,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     try {
       // 新状态 = 取反当前状态
       const newWarmed = !post._warmed;
-      const newCount = newWarmed ? (post.warmthCount || 0) + 1 : Math.max(0, (post.warmthCount || 0) - 1);
-      const updated = { ...post, _warmed: newWarmed, warmthCount: newCount };
+      const newCount = newWarmed ? (post.likeCount || 0) + 1 : Math.max(0, (post.likeCount || 0) - 1);
+      const updated = { ...post, _warmed: newWarmed, likeCount: newCount };
       syncPost(updated);
       await toggleWarmth(post._id, uid);
     } catch (err) {
@@ -114,7 +114,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const handleSendComment = async () => {
     if (!commentText.trim()) return;
     const displayName = userId ? '用户' + userId.slice(-4) : '游客';
-    const newComment: any = { id: 'comment_' + Date.now(), postId: commentPost.id, authorId: uid, authorName: displayName, text: commentText.trim(), createdAt: Date.now() };
+    const newComment: any = { id: 'comment_' + Date.now(), postId: commentPost._id, authorId: uid, authorName: displayName, text: commentText.trim(), createTime: Date.now() };
     setComments((prev: any[]) => [newComment, ...prev]);
     setCommentText('');
     const updated = { ...commentPost, commentCount: (commentPost.commentCount || 0) + 1 };
@@ -141,7 +141,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
         <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
         <View style={styles.authorInfo}>
           <Text style={[styles.authorName, { color: c.text }]}>{item.authorName}</Text>
-          <Text style={styles.postMeta}>{formatTime(item.createdAt)}</Text>
+          <Text style={styles.postMeta}>{formatTime(item.createTime)}</Text>
         </View>
         <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[item.category] || '#F5F5F5' }]}>
           <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[item.category] || '#666' }]}>{item.category}</Text>
@@ -151,7 +151,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       <View style={styles.actionBar}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(item)}>
           <Text style={[styles.actionIcon, isWarmed(item) && styles.actionIconRed]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
-          <Text style={[styles.actionCount, isWarmed(item) && styles.actionCountRed]}>{item.warmthCount || 0}</Text>
+          <Text style={[styles.actionCount, isWarmed(item) && styles.actionCountRed]}>{item.likeCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(item)}>
           <Text style={styles.actionIcon}>💬</Text>
@@ -195,7 +195,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
         </View>
       ) : (
         <FlatList data={posts} renderItem={renderPost}
-          keyExtractor={(item, index) => `post_${item._id || item.id || item.createdAt}_${index}`}
+          keyExtractor={(item, index) => `post_${item._id || item.createTime}_${index}`}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.textSecondary} />}
         />
@@ -244,7 +244,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
           {commentPost && (
             <FlatList
               data={[{ ...commentPost, isOriginalPost: true }, ...comments.map((c: any) => ({ ...c, isOriginalPost: false }))]}
-              keyExtractor={(item: any, index: number) => `comment_${item._id || item.id || item.createdAt}_${index}`}
+              keyExtractor={(item: any, index: number) => `comment_${item._id || item.id || item.createTime}_${index}`}
               contentContainerStyle={{ paddingBottom: 20 }}
               ListHeaderComponent={
                 <View style={[styles.commentPostCard, { backgroundColor: c.surface }]}>
@@ -252,7 +252,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                     <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
                     <View style={styles.authorInfo}>
                       <Text style={[styles.authorName, { color: c.text }]}>{commentPost.authorName}</Text>
-                      <Text style={styles.postMeta}>{formatTime(commentPost.createdAt)}</Text>
+                      <Text style={styles.postMeta}>{formatTime(commentPost.createTime)}</Text>
                     </View>
                     <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[commentPost.category] || '#F5F5F5' }]}>
                       <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[commentPost.category] || '#666' }]}>{commentPost.category}</Text>
@@ -262,7 +262,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                   <View style={styles.actionBar}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(commentPost)}>
                       <Text style={[styles.actionIcon, isWarmed(commentPost) && styles.actionIconRed]}>{isWarmed(commentPost) ? '❤️' : '🤍'}</Text>
-                      <Text style={[styles.actionCount, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.warmthCount || 0}</Text>
+                      <Text style={[styles.actionCount, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.likeCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn}>
                       <Text style={styles.actionIcon}>💬</Text>
@@ -290,7 +290,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                     <View style={styles.commentContent}>
                       <Text style={[styles.commentAuthorName, { color: c.text }]}>{item.authorName}</Text>
                       <Text style={[styles.commentText, { color: c.textSecondary }]}>{item.text}</Text>
-                      <Text style={[styles.commentTime, { color: c.textSecondary }]}>{formatTime(item.createdAt)}</Text>
+                      <Text style={[styles.commentTime, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
                     </View>
                   </View>
                 );
