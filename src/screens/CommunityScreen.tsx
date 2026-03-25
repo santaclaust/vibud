@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates } from '../services/CloudBaseService';
 
@@ -31,11 +31,11 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const [comments, setComments] = useState<any[]>([]);
 
   const fetchPosts = useCallback(async () => {
+    if (!uid) return; // userId 未设置前不查，避免用 guest uid 查不到真实用户数据
     setLoading(true);
     try {
       const category = activeCategory === '全部' ? undefined : activeCategory;
       const data = await getCommunityPosts(category, 100);
-      // 批量查询当前用户对所有帖子的暖心/收藏状态
       const postIds = data.map((p: any) => p._id || p.id);
       const { likedSet, collectedSet } = await getUserPostStates(postIds, uid);
       const merged = data.map((p: any) => {
@@ -47,6 +47,15 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     } catch (err) { console.error('获取帖子失败:', err); }
     finally { setLoading(false); setRefreshing(false); }
   }, [activeCategory, uid]);
+
+  // userId 从空变真实值时（匿名登录完成后）重新拉取帖子
+  const prevUserId = useRef(userId);
+  useEffect(() => {
+    if (prevUserId.current !== userId && userId) {
+      prevUserId.current = userId;
+      fetchPosts();
+    }
+  }, [userId]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
