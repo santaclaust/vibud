@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments, getPostById } from '../services/CloudBaseService';
@@ -7,7 +7,7 @@ const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', 
 const CATEGORY_COLORS: Record<string, string> = {
   '全部': '#666', '情绪': '#E57373', '心理': '#9575CD', '家庭': '#FF8A65',
   '爱情': '#F06292', '职场': '#5B8DEF', '学业': '#4FC3F7', '生活': '#81C784',
-  '成长': '#AED581', '互助': '#FFD54F', '吐槽': '#90A4AE', '其他': '#BDBDBD',
+  '成长': '#AED581', '互助': '#E65100', '吐槽': '#90A4AE', '其他': '#BDBDBD',
 };
 const CATEGORY_BG: Record<string, string> = {
   '全部': '#F5F5F5', '情绪': '#FFF0F0', '心理': '#F3EFFF', '家庭': '#FFF3E0',
