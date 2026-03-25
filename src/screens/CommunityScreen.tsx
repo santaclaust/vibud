@@ -174,20 +174,20 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       <Text style={[styles.postText, { color: c.text }]}>{item.text}</Text>
       <View style={[styles.actionBar, { borderTopColor: c.border }]}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(item)}>
-          <Text style={[styles.actionIcon, isWarmed(item) && styles.actionIconRed]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
+          <Text style={[styles.actionIcon, isWarmed(item) ? styles.actionIconRed : { color: c.textSecondary }]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
           <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(item) && styles.actionCountRed]}>{item.likeCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(item)}>
-          <Text style={styles.actionIcon}>💬</Text>
+          <Text style={[styles.actionIcon, { color: c.textSecondary }]}>💬</Text>
           <Text style={[styles.actionCount, { color: c.textSecondary }]}>{item.commentCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('转发功能', '开发中')}>
-          <Text style={styles.actionIcon}>🔄</Text>
+          <Text style={[styles.actionIcon, { color: c.textSecondary }]}>🔄</Text>
           <Text style={[styles.actionCount, { color: c.textSecondary }]}>{item.shareCount || 0}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => handleCollect(item)}>
-          <Text style={[styles.actionIcon, isCollected(item) && styles.actionIconYellow]}>{isCollected(item) ? '★' : '☆'}</Text>
-          <Text style={[styles.actionCount, isCollected(item) && styles.actionCountYellow]}>{isCollected(item) ? '已收藏' : '收藏'}</Text>
+          <Text style={[styles.actionIcon, isCollected(item) ? styles.actionIconYellow : { color: c.textSecondary }]}>{isCollected(item) ? '★' : '☆'}</Text>
+          <Text style={[styles.actionCount, { color: c.textSecondary }, isCollected(item) && styles.actionCountYellow]}>{isCollected(item) ? '已收藏' : '收藏'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -289,7 +289,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                       <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.likeCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(commentPost)}>
-                      <Text style={styles.actionIcon}>💬</Text>
+                      <Text style={[styles.actionIcon, { color: c.textSecondary }]}>💬</Text>
                       <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.commentCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('转发功能', '开发中')}>
@@ -297,8 +297,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                       <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.shareCount || 0}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => handleCollect(commentPost)}>
-                      <Text style={[styles.actionIcon, isCollected(commentPost) && styles.actionIconYellow]}>{isCollected(commentPost) ? '★' : '☆'}</Text>
-                      <Text style={[styles.actionCount, isCollected(commentPost) && styles.actionCountYellow]}>{isCollected(commentPost) ? '已收藏' : '收藏'}</Text>
+                      <Text style={[styles.actionIcon, isCollected(commentPost) ? styles.actionIconYellow : { color: c.textSecondary }]}>{isCollected(commentPost) ? '★' : '☆'}</Text>
+                      <Text style={[styles.actionCount, { color: c.textSecondary }, isCollected(commentPost) && styles.actionCountYellow]}>{isCollected(commentPost) ? '已收藏' : '收藏'}</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={[styles.commentDivider, { borderTopColor: c.border }]}>
