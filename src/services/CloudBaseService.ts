@@ -521,12 +521,17 @@ export const isPostCollectedByUser = async (postId: string, userId: string): Pro
 export const getFavoritePosts = async (userId: string) => {
   if (!initialized) await initCloudBase();
   try {
+    console.log('[CloudBase] getFavoritePosts userId:', userId);
+    // 查 favorites 集合
     const favR = await app!.database().collection('favorites').where({ userId }).get();
     const postIds: string[] = (favR.data || []).map((d: any) => d.postId);
-    console.log('[CloudBase] getFavoritePosts userId:', userId, 'postIds:', postIds);
+    console.log('[CloudBase] favorites 查询结果:', favR.data?.length, '条, postIds:', postIds);
     if (postIds.length === 0) return [];
+    // 批量查帖子
     const posts = await Promise.all(postIds.map((id: string) => app!.database().collection('community_posts').doc(id).get()));
-    return posts.map((r: any) => r.data).filter(Boolean);
+    const result = posts.map((r: any) => r.data).filter(Boolean);
+    console.log('[CloudBase] getFavoritePosts 返回:', result.length, '条');
+    return result;
   } catch (err) {
     console.error('[CloudBase] getFavoritePosts 失败:', err);
     return [];

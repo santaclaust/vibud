@@ -56,11 +56,13 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   };
 
   const openFavorites = async () => {
+    if (!userId) return;
     setShowFavorites(true);
     setLoadingFavorites(true);
     try {
-      const uid = userId || 'guest';
-      const posts = await getFavoritePosts(uid);
+      console.log('[Profile] openFavorites userId:', userId);
+      const posts = await getFavoritePosts(userId);
+      console.log('[Profile] openFavorites 返回:', posts.length, '条');
       setFavoritePosts(posts);
     } catch (err) {
       console.error('获取收藏失败:', err);
@@ -70,11 +72,11 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   };
 
   const handleUncollect = async (post: any) => {
-    const uid = userId || 'guest';
+    if (!userId) return;
     const docId = post._id || post.id;
     if (!docId) return;
     try {
-      await toggleCollect(docId, uid);
+      await toggleCollect(docId, userId);
       setFavoritePosts(prev => prev.filter(p => (p._id || p.id) !== docId));
     } catch (err) {
       console.error('取消收藏失败:', err);

@@ -81,6 +81,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
 
   const handleWarmth = async (post: any) => {
     if (!post._id) { Alert.alert('帖子数据异常'); return; }
+    if (!uid) { Alert.alert('请等待登录完成'); return; }
     try {
       // 新状态 = 取反当前状态
       const newWarmed = !post._warmed;
@@ -97,6 +98,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
 
   const handleCollect = async (post: any) => {
     if (!post._id) { Alert.alert('帖子数据异常'); return; }
+    if (!uid) { Alert.alert('请等待登录完成'); return; }
     try {
       const newCollected = !post._collected;
       const updated = { ...post, _collected: newCollected };
