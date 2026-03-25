@@ -41,7 +41,7 @@ export const initCloudBase = async (): Promise<boolean> => {
  */
 export const getAuthState = async () => {
   if (!initialized) await initCloudBase();
-  return app!.auth({ persistence: 'local' }).getAuthState();
+  return app!.auth({ persistence: 'local' }).hasLoginState();
 };
 
 /**
@@ -49,7 +49,8 @@ export const getAuthState = async () => {
  */
 export const getCurrentUser = async () => {
   if (!initialized) await initCloudBase();
-  return app!.auth({ persistence: 'local' }).currentUser;
+  const state = await app!.auth({ persistence: 'local' }).hasLoginState();
+  return state?.user || null;
 };
 
 /**
