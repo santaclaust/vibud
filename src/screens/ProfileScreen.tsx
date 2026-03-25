@@ -38,20 +38,22 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   const [selectedFavorites, setSelectedFavorites] = useState<Set<string>>(new Set());
   const [editMode, setEditMode] = useState(false);
 
-  const toggleSelectFavorite = (postId: string) => {
+  const toggleSelectFavorite = (post: any, index: number) => {
+    const key = String(post._id || post.id || `fav_${index}`);
     setSelectedFavorites(prev => {
       const next = new Set(prev);
-      if (next.has(postId)) next.delete(postId);
-      else next.add(postId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
   const toggleSelectAll = () => {
-    if (selectedFavorites.size === favoritePosts.length) {
+    const allKeys = favoritePosts.map((p, i) => String(p._id || p.id || `fav_${i}`));
+    if (selectedFavorites.size === allKeys.length) {
       setSelectedFavorites(new Set());
     } else {
-      setSelectedFavorites(new Set(favoritePosts.map(p => p._id)));
+      setSelectedFavorites(new Set(allKeys));
     }
   };
 
@@ -61,7 +63,11 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
     setLoadingFavorites(true);
     try {
       await batchUncollect(ids, userId);
-      setFavoritePosts(prev => prev.filter(p => !selectedFavorites.has(p._id)));
+      // 过滤时用相同 key 逻辑
+      setFavoritePosts(prev => prev.filter((p, i) => {
+        const key = String(p._id || p.id || `fav_${i}`);
+        return !selectedFavorites.has(key);
+      }));
       setSelectedFavorites(new Set());
       setEditMode(false);
     } catch (err) { console.error('批量取消收藏失败:', err); }
@@ -174,11 +180,16 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                     <Text style={{ color: c.primary, fontSize: 15 }}>{selectedFavorites.size === favoritePosts.length ? '取消全选' : '全选'}</Text>
                   </TouchableOpacity>
                   <Text style={[styles.favTitle, { color: c.text }]}>{selectedFavorites.size}/{favoritePosts.length} 已选</Text>
-                  <TouchableOpacity onPress={handleBatchUncollect} disabled={selectedFavorites.size === 0}>
-                    <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15, fontWeight: '600' }}>
-                      取消收藏{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity onPress={() => { setEditMode(false); setSelectedFavorites(new Set()); }}>
+                      <Text style={{ color: c.textSecondary, fontSize: 18 }}>×</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleBatchUncollect} disabled={selectedFavorites.size === 0}>
+                      <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15, fontWeight: '600' }}>
+                        取消{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </>
               ) : (
                 <>
@@ -201,11 +212,12 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                 <View style={styles.favEmpty}><Text style={{ color: c.textSecondary }}>还没有收藏内容</Text></View>
               ) : (
                 favoritePosts.map((post, i) => {
-                  const checked = selectedFavorites.has(post._id);
+                  const key = String(post._id || post.id || `fav_${i}`);
+                  const checked = selectedFavorites.has(key);
                   return (
-                    <View key={post._id || i} style={[styles.favItem, { borderBottomColor: c.border }]}>
+                    <View key={key} style={[styles.favItem, { borderBottomColor: c.border }]}>
                       {editMode ? (
-                        <TouchableOpacity style={styles.favCheckbox} onPress={() => toggleSelectFavorite(post._id)}>
+                        <TouchableOpacity style={styles.favCheckbox} onPress={() => toggleSelectFavorite(post, i)}>
                           <Text style={{ fontSize: 18, color: checked ? c.primary : c.textSecondary }}>{checked ? '☑' : '☐'}</Text>
                         </TouchableOpacity>
                       ) : null}
