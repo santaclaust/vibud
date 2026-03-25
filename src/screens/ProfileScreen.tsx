@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
-import { getEmotionLogs, getCommunityPosts, toggleCollect } from '../services/CloudBaseService';
+import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -60,9 +60,8 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
     setLoadingFavorites(true);
     try {
       const uid = userId || 'guest';
-      const allPosts = await getCommunityPosts(undefined, 200);
-      const collected = allPosts.filter((p: any) => (p.collectedBy || []).includes(uid));
-      setFavoritePosts(collected);
+      const posts = await getFavoritePosts(uid);
+      setFavoritePosts(posts);
     } catch (err) {
       console.error('获取收藏失败:', err);
     } finally {

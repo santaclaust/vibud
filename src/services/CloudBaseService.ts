@@ -517,6 +517,22 @@ export const isPostCollectedByUser = async (postId: string, userId: string): Pro
   return getPostCollects(postId, userId);
 };
 
+/** 获取某用户收藏的所有帖子完整内容 */
+export const getFavoritePosts = async (userId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const favR = await app!.database().collection('favorites').where({ userId }).get();
+    const postIds: string[] = (favR.data || []).map((d: any) => d.postId);
+    console.log('[CloudBase] getFavoritePosts userId:', userId, 'postIds:', postIds);
+    if (postIds.length === 0) return [];
+    const posts = await Promise.all(postIds.map((id: string) => app!.database().collection('community_posts').doc(id).get()));
+    return posts.map((r: any) => r.data).filter(Boolean);
+  } catch (err) {
+    console.error('[CloudBase] getFavoritePosts 失败:', err);
+    return [];
+  }
+};
+
 // ========== 情绪日志 ==========
 
 /** 保存情绪日志（倾诉后提取关键词） */
