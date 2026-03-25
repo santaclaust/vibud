@@ -408,13 +408,15 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
       q = q.where({ category });
     }
     const r = await q.limit(limitCount).get();
-    console.log('[CloudBase] getCommunityPosts 条数:', r.data?.length, 'keys:', Object.keys(r.data?.[0] || {}));
-    const data = (r.data || []).map((doc: any) => {
-      const docId = doc.docId || doc._id || doc.id;
-      console.log('[CloudBase] doc id:', doc.id, 'docId:', docId);
-      return { ...doc, id: doc.id || docId, docId };
+    console.log('[CloudBase] getCommunityPosts raw:', JSON.stringify(r).slice(0, 500));
+    const docs = r.data || [];
+    console.log('[CloudBase] getCommunityPosts 条数:', docs.length);
+    const data = docs.map((doc: any) => {
+      const id = doc.id || doc._id || '';
+      console.log('[CloudBase] doc:', id, 'text:', doc.text?.slice(0, 20));
+      return { ...doc, id, docId: id };
     });
-    return data.sort((a: any, b: any) => b.createdAt - a.createdAt);
+    return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (err) {
     console.error('[CloudBase] getCommunityPosts 失败:', err);
     return [];
