@@ -123,14 +123,14 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       <View style={styles.postHeader}>
         <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
         <View style={styles.authorInfo}>
-          <Text style={styles.authorName}>{item.authorName}</Text>
+          <Text style={[styles.authorName, { color: c.text }]}>{item.authorName}</Text>
           <Text style={styles.postMeta}>{formatTime(item.createdAt)}</Text>
         </View>
         <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[item.category] || '#F5F5F5' }]}>
           <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[item.category] || '#666' }]}>{item.category}</Text>
         </View>
       </View>
-      <Text style={styles.postText}>{item.text}</Text>
+      <Text style={[styles.postText, { color: c.text }]}>{item.text}</Text>
       <View style={styles.actionBar}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(item)}>
           <Text style={[styles.actionIcon, isWarmed(item) && styles.actionIconRed]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
@@ -234,14 +234,14 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                   <View style={styles.postHeader}>
                     <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
                     <View style={styles.authorInfo}>
-                      <Text style={styles.authorName}>{commentPost.authorName}</Text>
+                      <Text style={[styles.authorName, { color: c.text }]}>{commentPost.authorName}</Text>
                       <Text style={styles.postMeta}>{formatTime(commentPost.createdAt)}</Text>
                     </View>
                     <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[commentPost.category] || '#F5F5F5' }]}>
                       <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[commentPost.category] || '#666' }]}>{commentPost.category}</Text>
                     </View>
                   </View>
-                  <Text style={styles.postText}>{commentPost.text}</Text>
+                  <Text style={[styles.postText, { color: c.text }]}>{commentPost.text}</Text>
                   <View style={styles.actionBar}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(commentPost)}>
                       <Text style={[styles.actionIcon, isWarmed(commentPost) && styles.actionIconRed]}>{isWarmed(commentPost) ? '❤️' : '🤍'}</Text>
@@ -271,8 +271,8 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
                   <View style={[styles.commentItem, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
                     <View style={styles.commentAvatar}><Text style={{ fontSize: 13 }}>🌱</Text></View>
                     <View style={styles.commentContent}>
-                      <Text style={styles.commentAuthorName}>{item.authorName}</Text>
-                      <Text style={styles.commentText}>{item.text}</Text>
+                      <Text style={[styles.commentAuthorName, { color: c.text }]}>{item.authorName}</Text>
+                      <Text style={[styles.commentText, { color: c.textSecondary }]}>{item.text}</Text>
                       <Text style={[styles.commentTime, { color: c.textSecondary }]}>{formatTime(item.createdAt)}</Text>
                     </View>
                   </View>
@@ -315,11 +315,11 @@ const styles = StyleSheet.create({
   avatarWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontSize: 18 },
   authorInfo: { flex: 1, marginLeft: 10 },
-  authorName: { fontSize: 14, fontWeight: '600', color: '#1F1F1F' },
+  authorName: { fontSize: 14, fontWeight: '600' },
   postMeta: { fontSize: 11, color: '#999', marginTop: 1 },
   categoryTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   categoryTagText: { fontSize: 11, fontWeight: '600' },
-  postText: { fontSize: 15, lineHeight: 22, color: '#1F1F1F', marginBottom: 12 },
+  postText: { fontSize: 15, lineHeight: 22, marginBottom: 12 },
   actionBar: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 0.5, borderTopColor: '#F0F0F0', paddingTop: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
   actionBtnRight: { marginRight: 0, marginLeft: 'auto' },
@@ -351,8 +351,8 @@ const styles = StyleSheet.create({
   commentItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 0.5 },
   commentAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   commentContent: { flex: 1, marginLeft: 10 },
-  commentAuthorName: { fontSize: 13, fontWeight: '600', color: '#1F1F1F', marginBottom: 4 },
-  commentText: { fontSize: 14, color: '#333', lineHeight: 20, marginBottom: 4 },
+  commentAuthorName: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  commentText: { fontSize: 14, lineHeight: 20, marginBottom: 4 },
   commentTime: { fontSize: 11 },
   commentEmpty: { alignItems: 'center', paddingVertical: 30 },
   commentInputWrap: { flexDirection: 'row', alignItems: 'center', padding: 12, borderTopWidth: 0.5, gap: 10 },

@@ -426,7 +426,7 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 用 _id 直接定位，字段存顶层 */
+/** 暖心（toggle）- 同时写顶层和嵌套位置，兼容新旧数据结构 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
@@ -436,14 +436,19 @@ export const toggleWarmth = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    const warmthCount = post.warmthCount ?? 0;
-    const warmedBy: string[] = post.warmedBy || [];
+    const hasData = !!post.data; // 旧帖子有嵌套 data 结构
+    const warmthCount = hasData ? (post.data.warmthCount ?? 0) : (post.warmthCount ?? 0);
+    const warmedBy: string[] = hasData ? (post.data.warmedBy || []) : (post.warmedBy || []);
     const hasWarmed = warmedBy.includes(userId);
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'count:', warmthCount, 'warmedBy:', warmedBy);
+    const newCount = hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1;
+    const newWarmedBy = hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId];
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'newCount:', newCount, 'warmedBy:', newWarmedBy);
     
+    // 同时更新顶层字段（新高亮帖子）和嵌套 data（旧帖子）
     await app!.database().collection('community_posts').doc(postId).update({
-      warmthCount: hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1,
-      warmedBy: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
+      warmthCount: newCount,
+      warmedBy: newWarmedBy,
+      ...(hasData ? { 'data.warmthCount': newCount, 'data.warmedBy': newWarmedBy } : {}),
     });
     console.log('[CloudBase] 暖心成功');
   } catch (err) {
@@ -462,12 +467,15 @@ export const toggleCollect = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    const collectedBy: string[] = post.collectedBy || [];
+    const hasData = !!post.data;
+    const collectedBy: string[] = hasData ? (post.data.collectedBy || []) : (post.collectedBy || []);
     const hasCollected = collectedBy.includes(userId);
-    console.log('[CloudBase] hasCollected:', hasCollected, 'collectedBy:', collectedBy);
+    const newCollectedBy = hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId];
+    console.log('[CloudBase] hasCollected:', hasCollected, 'collectedBy:', newCollectedBy);
     
     await app!.database().collection('community_posts').doc(postId).update({
-      collectedBy: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
+      collectedBy: newCollectedBy,
+      ...(hasData ? { 'data.collectedBy': newCollectedBy } : {}),
     });
     console.log('[CloudBase] 收藏成功');
   } catch (err) {
