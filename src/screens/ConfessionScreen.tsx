@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { aiService } from '../services/AIService';
 import { storageService } from '../services/StorageService';
+import { saveEmotionLog, extractEmotionKeywords } from '../services/CloudBaseService';
 
 interface ModeOption { id: string; name: string; icon: string; description: string; }
 interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; timestamp: number; }
@@ -14,7 +15,7 @@ const modeOptions: ModeOption[] = [
   { id: 'draw', name: '治愈取签', icon: '🎴', description: '抽取签语，化解情绪' },
 ];
 
-export default function ConfessionScreen({ navigation, colors: propsColors, goBack }: any) {
+export default function ConfessionScreen({ navigation, colors: propsColors, goBack, userId }: any) {
   const defaultColors = { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF' };
   const colors = propsColors || defaultColors;
 
@@ -60,6 +61,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
   const [isModeSelectorVisible, setModeSelectorVisible] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationDone, setConversationDone] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // 加载草稿
@@ -81,6 +83,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     if (!text.trim() || isLoading) return;
     const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: text.trim(), timestamp: Date.now() };
     setMessages(prev => [...prev, userMessage]);
+    setConversationDone(true);
     setText('');
     scrollToBottom();
     if (selectedMode === 'heal' || selectedMode === 'consult') {
@@ -99,7 +102,43 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     }
   };
 
-  const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); };
+  const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); setConversationDone(false); };
+
+  // 结束倾诉，提取情绪关键词并保存
+  const handleEndConversation = async () => {
+    if (messages.length === 0) return;
+    const uid = userId || 'guest';
+    
+    // 合并对话文本
+    const fullText = messages.map(m => m.content).join('。');
+    if (fullText.length < 5) {
+      Alert.alert('对话太短', '请多说一些，让我更好地理解你');
+      return;
+    }
+    
+    try {
+      const keywords = extractEmotionKeywords(fullText);
+      await saveEmotionLog({
+        userId: uid,
+        keywords,
+        textExcerpt: fullText.slice(0, 50),
+        timestamp: Date.now(),
+      });
+      
+      Alert.alert(
+        '已记录情绪 🌱',
+        `关键词：${keywords.join('、')}\n\n感谢你的倾诉，希望今天的对话对你有帮助。`,
+        [{ text: '好的', onPress: () => {
+          setMessages([]);
+          setConversationDone(false);
+          setText('');
+        }}]
+      );
+    } catch (err) {
+      console.error('保存情绪日志失败:', err);
+      Alert.alert('提示', '倾诉已完成，感谢你的信任。');
+    }
+  };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
     <View style={[s.messageContainer, item.role === 'user' ? s.userMessageContainer : s.assistantMessageContainer]}>
@@ -147,6 +186,11 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
             <TouchableOpacity style={[s.sendButton, (!text.trim() || isLoading) && s.sendButtonDisabled]} onPress={handleSend} disabled={!text.trim() || isLoading}>
               <Text style={s.sendButtonText}>{isLoading ? '发送中...' : '发送'}</Text>
             </TouchableOpacity>
+            {messages.filter(m => m.role === 'user').length >= 1 && (
+              <TouchableOpacity style={{ flex: 1, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }} onPress={handleEndConversation}>
+                <Text style={{ fontSize: 16, color: colors.textSecondary }}>结束倾诉</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>
