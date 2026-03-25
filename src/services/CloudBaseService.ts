@@ -414,10 +414,22 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
     const docs = r.data || [];
     console.log('[CloudBase] getCommunityPosts 条数:', docs.length);
     const data = docs.map((doc: any) => {
-      // 扁平结构：所有字段在 doc 顶层（add时直接传对象，不用data包装）
+      // 兼容旧帖子（嵌套 data）和新帖子（顶层字段）
+      const inner = doc.data || {};
+      const warmthCount = doc.warmthCount ?? inner.warmthCount ?? 0;
+      const warmedBy: string[] = doc.warmedBy ?? inner.warmedBy ?? [];
+      const collectedBy: string[] = doc.collectedBy ?? inner.collectedBy ?? [];
       const id = doc.id || doc._id || '';
-      console.log('[CloudBase] doc _id:', doc._id, 'id:', id, 'text:', doc.text?.slice(0, 20), 'warmedBy:', doc.warmedBy);
-      return { ...doc, id, docId: id };
+      console.log('[CloudBase] doc _id:', doc._id, 'warmthCount:', warmthCount, 'warmedBy:', warmedBy.length);
+      return {
+        ...doc,
+        ...inner, // 旧帖子字段展开
+        id,
+        docId: id,
+        warmthCount,
+        warmedBy,
+        collectedBy,
+      };
     });
     return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (err) {
@@ -426,7 +438,7 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 同时写顶层和嵌套位置，兼容新旧数据结构 */
+/** 暖心（toggle）- set整条文档，统一用顶层字段格式，删除旧嵌套 data */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
@@ -436,19 +448,20 @@ export const toggleWarmth = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    const hasData = !!post.data; // 旧帖子有嵌套 data 结构
-    const warmthCount = hasData ? (post.data.warmthCount ?? 0) : (post.warmthCount ?? 0);
-    const warmedBy: string[] = hasData ? (post.data.warmedBy || []) : (post.warmedBy || []);
+    // 优先读顶层字段，fallback 嵌套 data（旧帖子格式）
+    const warmthCount = post.warmthCount ?? post.data?.warmthCount ?? 0;
+    const warmedBy: string[] = post.warmedBy ?? post.data?.warmedBy ?? [];
     const hasWarmed = warmedBy.includes(userId);
     const newCount = hasWarmed ? Math.max(0, warmthCount - 1) : warmthCount + 1;
     const newWarmedBy = hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId];
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'newCount:', newCount, 'warmedBy:', newWarmedBy);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'newCount:', newCount);
     
-    // 同时更新顶层字段（新高亮帖子）和嵌套 data（旧帖子）
-    await app!.database().collection('community_posts').doc(postId).update({
+    // set 替换整条文档，统一格式：删除 data 嵌套，全部存顶层
+    const { data: _ignored, ...rest } = post; // 移除旧嵌套 data
+    await app!.database().collection('community_posts').doc(postId).set({
+      ...rest,
       warmthCount: newCount,
       warmedBy: newWarmedBy,
-      ...(hasData ? { 'data.warmthCount': newCount, 'data.warmedBy': newWarmedBy } : {}),
     });
     console.log('[CloudBase] 暖心成功');
   } catch (err) {
@@ -467,15 +480,15 @@ export const toggleCollect = async (postId: string, userId: string) => {
     if (!r.data) throw new Error('帖子不存在: ' + postId);
     
     const post: any = r.data;
-    const hasData = !!post.data;
-    const collectedBy: string[] = hasData ? (post.data.collectedBy || []) : (post.collectedBy || []);
+    const collectedBy: string[] = post.collectedBy ?? post.data?.collectedBy ?? [];
     const hasCollected = collectedBy.includes(userId);
     const newCollectedBy = hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId];
     console.log('[CloudBase] hasCollected:', hasCollected, 'collectedBy:', newCollectedBy);
     
-    await app!.database().collection('community_posts').doc(postId).update({
+    const { data: _ignored, ...rest } = post;
+    await app!.database().collection('community_posts').doc(postId).set({
+      ...rest,
       collectedBy: newCollectedBy,
-      ...(hasData ? { 'data.collectedBy': newCollectedBy } : {}),
     });
     console.log('[CloudBase] 收藏成功');
   } catch (err) {
