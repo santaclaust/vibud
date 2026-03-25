@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments, getPostById } from '../services/CloudBaseService';
 
 const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
@@ -165,17 +166,22 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
 
   const renderPost = ({ item }: { item: any }) => (
     <View style={[styles.postCard, { backgroundColor: c.surface }]}>
-      <View style={styles.postHeader}>
-        <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
-        <View style={styles.authorInfo}>
-          <Text style={[styles.authorName, { color: c.text }]}>{item.authorName}</Text>
-          <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
+      {/* 点击卡片打开评论区 */}
+      <TouchableOpacity activeOpacity={0.85} onPress={() => openComment(item)}>
+        <View style={styles.postHeader}>
+          <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
+          <View style={styles.authorInfo}>
+            <Text style={[styles.authorName, { color: c.text }]}>{item.authorName}</Text>
+            <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
+          </View>
+          <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[item.category] || '#F5F5F5' }]}>
+            <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[item.category] || '#666' }]}>{item.category}</Text>
+          </View>
         </View>
-        <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[item.category] || '#F5F5F5' }]}>
-          <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[item.category] || '#666' }]}>{item.category}</Text>
-        </View>
-      </View>
-      <Text style={[styles.postText, { color: c.text }]}>{item.text}</Text>
+        <Text style={[styles.postText, { color: c.text }]}>{item.text}</Text>
+      </TouchableOpacity>
+
+      {/* 操作栏独立，不触发卡片点击 */}
       <View style={[styles.actionBar, { borderTopColor: c.border }]}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(item)}>
           <Text style={[styles.actionIcon, isWarmed(item) ? styles.actionIconRed : { color: c.textSecondary }]}>{isWarmed(item) ? '❤️' : '🤍'}</Text>
@@ -261,81 +267,78 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 评论弹窗 */}
-      <Modal visible={!!commentPost} transparent animationType="slide" onRequestClose={() => setCommentPost(null)}>
-        <SafeAreaView style={[styles.commentModal, { backgroundColor: c.background }]}>
-          <View style={[styles.commentHeader, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-            <TouchableOpacity onPress={() => setCommentPost(null)}><Text style={{ color: c.textSecondary, fontSize: 15 }}>← 返回</Text></TouchableOpacity>
-            <Text style={[styles.commentHeaderTitle, { color: c.text }]}>评论</Text>
-            <View style={{ width: 50 }} />
-          </View>
-          {commentPost && (
-            <FlatList
-              data={[{ ...commentPost, isOriginalPost: true }, ...comments.map((c: any) => ({ ...c, isOriginalPost: false }))]}
-              keyExtractor={(item: any, index: number) => `comment_${item._id || item.id || item.createTime}_${index}`}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              ListHeaderComponent={
-                <View style={[styles.commentPostCard, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-                  <View style={styles.postHeader}>
-                    <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
-                    <View style={styles.authorInfo}>
-                      <Text style={[styles.authorName, { color: c.text }]}>{commentPost.authorName}</Text>
-                      <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(commentPost.createTime)}</Text>
-                    </View>
-                    <View style={[styles.categoryTag, { backgroundColor: CATEGORY_BG[commentPost.category] || '#F5F5F5' }]}>
-                      <Text style={[styles.categoryTagText, { color: CATEGORY_COLORS[commentPost.category] || '#666' }]}>{commentPost.category}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.postText, { color: c.text }]}>{commentPost.text}</Text>
-                  <View style={[styles.actionBar, { borderTopColor: c.border }]}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => handleWarmth(commentPost)}>
-                      <Text style={[styles.actionIcon, isWarmed(commentPost) && styles.actionIconRed]}>{isWarmed(commentPost) ? '❤️' : '🤍'}</Text>
-                      <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(commentPost) && styles.actionCountRed]}>{commentPost.likeCount || 0}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => openComment(commentPost)}>
-                      <Text style={[styles.actionIcon, { color: c.textSecondary }]}>💬</Text>
-                      <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.commentCount || 0}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('转发功能', '开发中')}>
-                      <Text style={styles.actionIcon}>🔄</Text>
-                      <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost.shareCount || 0}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => handleCollect(commentPost)}>
-                      <Text style={[styles.actionIcon, isCollected(commentPost) ? styles.actionIconYellow : { color: c.textSecondary }]}>{isCollected(commentPost) ? '★' : '☆'}</Text>
-                      <Text style={[styles.actionCount, { color: c.textSecondary }, isCollected(commentPost) && styles.actionCountYellow]}>{isCollected(commentPost) ? '已收藏' : '收藏'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={[styles.commentDivider, { borderTopColor: c.border }]}>
-                    <Text style={[styles.commentDividerText, { color: c.textSecondary }]}>评论</Text>
+      {/* 评论弹窗 - 苹果风格居中卡片+虚化背景 */}
+      <Modal visible={!!commentPost} transparent animationType="fade" onRequestClose={() => setCommentPost(null)}>
+        <View style={styles.commentOverlay}>
+          {/* 苹果虚化背景 */}
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          {/* 半透明遮罩点击关闭 */}
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCommentPost(null)} activeOpacity={1} />
+          {/* 居中卡片 */}
+          <View style={[styles.commentCard, { backgroundColor: c.surface }]}>
+            {/* 卡片头部 */}
+            <View style={[styles.commentCardHeader, { borderBottomColor: c.border }]}>
+              <TouchableOpacity onPress={() => setCommentPost(null)}>
+                <Text style={{ color: c.textSecondary, fontSize: 15 }}>关闭</Text>
+              </TouchableOpacity>
+              <Text style={[styles.commentCardTitle, { color: c.text }]}>评论</Text>
+              <View style={{ width: 40 }} />
+            </View>
+            {/* 帖子内容 */}
+            <ScrollView style={styles.commentScroll} contentContainerStyle={{ paddingBottom: 16 }}>
+              <View style={styles.commentPostHeader}>
+                <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
+                <View style={styles.authorInfo}>
+                  <Text style={[styles.authorName, { color: c.text }]}>{commentPost?.authorName}</Text>
+                  <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(commentPost?.createTime)}</Text>
+                </View>
+              </View>
+              <Text style={[styles.commentPostText, { color: c.text }]}>{commentPost?.text}</Text>
+              {/* 操作栏 */}
+              <View style={[styles.actionBar, { borderTopColor: c.border, marginTop: 12 }]}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => commentPost && handleWarmth(commentPost)}>
+                  <Text style={[styles.actionIcon, isWarmed(commentPost || {}) ? styles.actionIconRed : { color: c.textSecondary }]}>{isWarmed(commentPost || {}) ? '❤️' : '🤍'}</Text>
+                  <Text style={[styles.actionCount, { color: c.textSecondary }, isWarmed(commentPost || {}) && styles.actionCountRed]}>{commentPost?.likeCount || 0}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn}>
+                  <Text style={[styles.actionIcon, { color: c.textSecondary }]}>💬</Text>
+                  <Text style={[styles.actionCount, { color: c.textSecondary }]}>{commentPost?.commentCount || 0}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRight]} onPress={() => commentPost && handleCollect(commentPost)}>
+                  <Text style={[styles.actionIcon, isCollected(commentPost || {}) ? styles.actionIconYellow : { color: c.textSecondary }]}>{isCollected(commentPost || {}) ? '★' : '☆'}</Text>
+                  <Text style={[styles.actionCount, { color: c.textSecondary }, isCollected(commentPost || {}) && styles.actionCountYellow]}>{isCollected(commentPost || {}) ? '已收藏' : '收藏'}</Text>
+                </TouchableOpacity>
+              </View>
+              {/* 分隔 */}
+              <View style={[styles.commentDivider, { borderTopColor: c.border }]}>
+                <Text style={[styles.commentDividerText, { color: c.textSecondary }]}>全部评论 ({comments.length})</Text>
+              </View>
+              {/* 评论列表 */}
+              {comments.length === 0 ? (
+                <View style={styles.commentEmpty}><Text style={{ color: c.textSecondary, fontSize: 14 }}>暂无评论，快来说点什么吧~</Text></View>
+              ) : comments.map((item: any, index: number) => (
+                <View key={item._id || item.id || index} style={[styles.commentItem, { borderBottomColor: c.border }]}>
+                  <View style={styles.commentAvatar}><Text style={{ fontSize: 13 }}>🌱</Text></View>
+                  <View style={styles.commentContent}>
+                    <Text style={[styles.commentAuthorName, { color: c.text }]}>{item.authorName}</Text>
+                    <Text style={[styles.commentText, { color: c.textSecondary }]}>{item.text}</Text>
+                    <Text style={[styles.commentTime, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
                   </View>
                 </View>
-              }
-              renderItem={({ item, index }: { item: any; index: number }) => {
-                if (index === 0) return null;
-                return (
-                  <View style={[styles.commentItem, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-                    <View style={styles.commentAvatar}><Text style={{ fontSize: 13 }}>🌱</Text></View>
-                    <View style={styles.commentContent}>
-                      <Text style={[styles.commentAuthorName, { color: c.text }]}>{item.authorName}</Text>
-                      <Text style={[styles.commentText, { color: c.textSecondary }]}>{item.text}</Text>
-                      <Text style={[styles.commentTime, { color: c.textSecondary }]}>{formatTime(item.createTime)}</Text>
-                    </View>
-                  </View>
-                );
-              }}
-              ListEmptyComponent={<View style={styles.commentEmpty}><Text style={{ color: c.textSecondary, fontSize: 14 }}>暂无评论，快来抢沙发吧~</Text></View>}
-            />
-          )}
-          <View style={[styles.commentInputWrap, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-            <TextInput style={[styles.commentInput, { backgroundColor: c.background, color: c.text }]}
-              placeholder="说点什么..." placeholderTextColor={c.textSecondary} value={commentText}
-              onChangeText={setCommentText} maxLength={200} />
-            <TouchableOpacity style={[styles.commentSendBtn, { backgroundColor: commentText.trim() ? c.primary : '#CCC' }]}
-              onPress={handleSendComment} disabled={!commentText.trim()}>
-              <Text style={styles.commentSendBtnText}>发送</Text>
-            </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {/* 输入区 */}
+            <View style={[styles.commentInputWrap, { borderTopColor: c.border }]}>
+              <TextInput style={[styles.commentInput, { backgroundColor: c.background, color: c.text }]}
+                placeholder="说点什么..." placeholderTextColor={c.textSecondary} value={commentText}
+                onChangeText={setCommentText} maxLength={200} />
+              <TouchableOpacity style={[styles.commentSendBtn, { backgroundColor: commentText.trim() ? c.primary : '#CCC' }]}
+                onPress={handleSendComment} disabled={!commentText.trim()}>
+                <Text style={styles.commentSendBtnText}>发送</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -387,10 +390,6 @@ const styles = StyleSheet.create({
   modalCatTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
   modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top', borderWidth: 1 },
   charCount: { textAlign: 'right', fontSize: 12, marginTop: 8 },
-  commentModal: { flex: 1 },
-  commentHeader: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 0.5 },
-  commentHeaderTitle: { fontSize: 16, fontWeight: '600' },
-  commentPostCard: { padding: 16, borderBottomWidth: 0.5 },
   commentDivider: { paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 0.5, marginTop: 0 },
   commentDividerText: { fontSize: 12, fontWeight: '600' },
   commentItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 0.5 },
@@ -404,4 +403,12 @@ const styles = StyleSheet.create({
   commentInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#E5E5E5' },
   commentSendBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
   commentSendBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  // 苹果风格评论弹窗
+  commentOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  commentCard: { width: '90%', maxHeight: '80%', borderRadius: 20, overflow: 'hidden' },
+  commentCardHeader: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  commentCardTitle: { fontSize: 16, fontWeight: '600' },
+  commentScroll: { maxHeight: 400 },
+  commentPostHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  commentPostText: { fontSize: 15, lineHeight: 22 },
 });
