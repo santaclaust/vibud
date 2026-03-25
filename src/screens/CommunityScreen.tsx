@@ -114,14 +114,18 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const openComment = async (post: any) => {
     setCommentPost(post);
     setComments([]);
-    if (!uid) return;
+    if (!uid || !post._id) return;
     try {
       const [comments, postData] = await Promise.all([
         getComments(post._id),
         getPostById(post._id),
       ]);
       setComments(comments);
-      if (postData) setCommentPost({ ...commentPost, ...postData });
+      if (postData) {
+        // 确保 _id 是干净字符串（CloudBase 返回的可能是对象格式）
+        const cleanPost = { ...postData, _id: String(postData._id || post._id) };
+        setCommentPost(cleanPost);
+      }
     } catch (err) { console.error('加载评论失败:', err); }
   };
 

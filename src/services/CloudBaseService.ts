@@ -459,7 +459,7 @@ const getPostCollects = async (postId: string, userId: string) => {
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
-    const cloudBaseId = postId; // 传入的 postId 就是 CloudBase _id
+    const cloudBaseId = String(postId); // 确保是字符串
     const postR = await app!.database().collection('community_posts').doc(cloudBaseId).get();
     if (!postR.data) throw new Error('帖子不存在');
     const post: any = postR.data;
@@ -530,10 +530,11 @@ export const publishComment = async (comment: {
   if (!initialized) await initCloudBase();
   const r: any = await addDocument('comments', {
     ...comment,
+    postId: String(comment.postId),
     createTime: Date.now(),
   });
   // 更新帖子评论数（更新顶层 commentCount）
-  const postR = await app!.database().collection('community_posts').doc(comment.postId).get();
+  const postR = await app!.database().collection('community_posts').doc(String(comment.postId)).get();
   if (postR.data) {
     const post: any = postR.data;
     const inner = post.data || {};
