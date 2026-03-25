@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
-import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates } from '../services/CloudBaseService';
+import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments, getPostById } from '../services/CloudBaseService';
 
 const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
 const CATEGORY_COLORS: Record<string, string> = {
@@ -111,16 +111,38 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     }
   };
 
-  const openComment = (post: any) => { setCommentPost(post); setComments([]); };
+  const openComment = async (post: any) => {
+    setCommentPost(post);
+    setComments([]);
+    if (!uid) return;
+    try {
+      const [comments, postData] = await Promise.all([
+        getComments(post._id),
+        getPostById(post._id),
+      ]);
+      setComments(comments);
+      if (postData) setCommentPost({ ...commentPost, ...postData });
+    } catch (err) { console.error('加载评论失败:', err); }
+  };
 
   const handleSendComment = async () => {
-    if (!commentText.trim()) return;
-    const displayName = userId ? '用户' + userId.slice(-4) : '游客';
-    const newComment: any = { id: 'comment_' + Date.now(), postId: commentPost._id, authorId: uid, authorName: displayName, text: commentText.trim(), createTime: Date.now() };
-    setComments((prev: any[]) => [newComment, ...prev]);
+    const text = commentText.trim();
+    if (!text) return;
+    if (!uid) { Alert.alert('请等待登录完成'); return; }
+    const displayName = uid ? '用户' + uid.slice(-4) : '游客';
+    const newComment: any = {
+      id: 'comment_' + Date.now(),
+      postId: commentPost._id,
+      authorId: uid,
+      authorName: displayName,
+      text,
+      createTime: Date.now(),
+    };
     setCommentText('');
-    const updated = { ...commentPost, commentCount: (commentPost.commentCount || 0) + 1 };
-    syncPost(updated);
+    try {
+      await publishComment({ postId: commentPost._id, authorId: uid, authorName: displayName, text, userId: uid });
+      setComments((prev: any[]) => [newComment, ...prev]);
+    } catch (err) { Alert.alert('评论失败'); console.error('评论失败:', err); }
   };
 
   const formatTime = (ts: number | string | undefined) => {

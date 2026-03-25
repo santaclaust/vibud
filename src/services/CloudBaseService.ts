@@ -517,6 +517,59 @@ export const isPostCollectedByUser = async (postId: string, userId: string): Pro
   return getPostCollects(postId, userId);
 };
 
+// ========== 评论集合 ==========
+
+/** 发布评论 */
+export const publishComment = async (comment: {
+  postId: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  userId: string;
+}) => {
+  if (!initialized) await initCloudBase();
+  const r: any = await addDocument('comments', {
+    ...comment,
+    createTime: Date.now(),
+  });
+  // 更新帖子评论数（更新顶层 commentCount）
+  const postR = await app!.database().collection('community_posts').doc(comment.postId).get();
+  if (postR.data) {
+    const post: any = postR.data;
+    const inner = post.data || {};
+    const currentCount = post.commentCount ?? inner.commentCount ?? 0;
+    await app!.database().collection('community_posts').doc(comment.postId).update({ commentCount: currentCount + 1 });
+  }
+  return r;
+};
+
+/** 获取某帖子的所有评论 */
+export const getComments = async (postId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('comments')
+      .where({ postId })
+      .get();
+    console.log('[CloudBase] getComments postId:', postId, '条数:', r.data?.length);
+    return r.data || [];
+  } catch (err) {
+    console.error('[CloudBase] getComments 失败:', err);
+    return [];
+  }
+};
+
+/** 根据 _id 获取单个帖子 */
+export const getPostById = async (postId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('community_posts').doc(postId).get();
+    return r.data || null;
+  } catch (err) {
+    console.error('[CloudBase] getPostById 失败:', err);
+    return null;
+  }
+};
+
 /** 获取某用户收藏的所有帖子完整内容 */
 export const getFavoritePosts = async (userId: string) => {
   if (!initialized) await initCloudBase();
