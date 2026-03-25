@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
-import { getEmotionLogs } from '../services/CloudBaseService';
+import { getEmotionLogs, getCommunityPosts, toggleCollect } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -13,7 +13,7 @@ interface ProfileScreenProps {
 const menuItems = [
   { id: 'emotion', icon: '🌿', name: '心绪历程', arrow: '›' },
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
-  { id: 'favorites', icon: '❤️', name: '收藏', arrow: '›' },
+  { id: 'favorites', icon: '★', name: '收藏', arrow: '›' },
   { id: 'settings', icon: '⚙️', name: '设置', arrow: '›' },
   { id: 'help', icon: '❓', name: '帮助与反馈', arrow: '›' },
   { id: 'about', icon: 'ℹ️', name: '关于心芽', arrow: '›' },
@@ -21,12 +21,9 @@ const menuItems = [
 
 export default function ProfileScreen({ navigation, colors, userId, userInfo, onUserCardPress }: ProfileScreenProps) {
   const c = colors || { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#999999', border: '#F0F0F0' };
-  
-  // 用户名处理
+
   const displayName = userInfo?.nickname || (userId ? `用户${userId.slice(0, 6)}` : '新用户');
   const displayDesc = userId ? (userInfo?.phone || '已登录') : '点击登录';
-  
-  // 统计数据
   const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, continuousDays: 0 };
 
   // 情绪记忆弹窗
@@ -34,10 +31,14 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   const [emotionLogs, setEmotionLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // 收藏弹窗
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [favoritePosts, setFavoritePosts] = useState<any[]>([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+
   const handleMenuPress = (itemId: string) => {
-    if (itemId === 'emotion') {
-      openEmotionMemory();
-    }
+    if (itemId === 'emotion') { openEmotionMemory(); }
+    else if (itemId === 'favorites') { openFavorites(); }
   };
 
   const openEmotionMemory = async () => {
@@ -54,22 +55,40 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
     }
   };
 
+  const openFavorites = async () => {
+    setShowFavorites(true);
+    setLoadingFavorites(true);
+    try {
+      const uid = userId || 'guest';
+      const allPosts = await getCommunityPosts(undefined, 200);
+      const collected = allPosts.filter((p: any) => (p.collectedBy || []).includes(uid));
+      setFavoritePosts(collected);
+    } catch (err) {
+      console.error('获取收藏失败:', err);
+    } finally {
+      setLoadingFavorites(false);
+    }
+  };
+
+  const handleUncollect = async (post: any) => {
+    const uid = userId || 'guest';
+    try {
+      await toggleCollect(post.id, uid);
+      setFavoritePosts(prev => prev.filter(p => p.id !== post.id));
+    } catch (err) {
+      console.error('取消收藏失败:', err);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Text style={[styles.title, { color: c.text }]}>我的</Text>
       </View>
-      
+
       <ScrollView style={styles.content}>
-        {/* 用户卡片 - 可点击登录 */}
-        <TouchableOpacity 
-          style={[styles.userCard, { backgroundColor: c.surface }]} 
-          onPress={onUserCardPress}
-          activeOpacity={0.7}
-        >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>🌱</Text>
-          </View>
+        <TouchableOpacity style={[styles.userCard, { backgroundColor: c.surface }]} onPress={onUserCardPress} activeOpacity={0.7}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>🌱</Text></View>
           <View style={styles.userInfo}>
             <Text style={[styles.userName, { color: c.text }]}>{displayName}</Text>
             <Text style={[styles.userDesc, { color: c.textSecondary }]}>{displayDesc}</Text>
@@ -77,7 +96,6 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
           <Text style={[styles.arrow, { color: c.textSecondary }]}>›</Text>
         </TouchableOpacity>
 
-        {/* 统计数据 */}
         <View style={[styles.statsRow, { backgroundColor: c.surface }]}>
           <View style={styles.statItem}>
             <Text style={[styles.statNum, { color: c.text }]}>{stats.confessionCount || 0}</Text>
@@ -93,14 +111,9 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
           </View>
         </View>
 
-        {/* 菜单列表 */}
         <View style={[styles.menuSection, { backgroundColor: c.surface }]}>
-          {menuItems.map((item) => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={[styles.menuItem, { borderBottomColor: c.border }]}
-              onPress={() => handleMenuPress(item.id)}
-            >
+          {menuItems.map(item => (
+            <TouchableOpacity key={item.id} style={[styles.menuItem, { borderBottomColor: c.border }]} onPress={() => handleMenuPress(item.id)}>
               <Text style={styles.menuIcon}>{item.icon}</Text>
               <Text style={[styles.menuName, { color: c.text }]}>{item.name}</Text>
               <Text style={[styles.menuArrow, { color: c.textSecondary }]}>{item.arrow}</Text>
@@ -109,15 +122,42 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
         </View>
       </ScrollView>
 
+      {/* 收藏弹窗 */}
+      <Modal visible={showFavorites} transparent animationType="fade" onRequestClose={() => setShowFavorites(false)}>
+        <View style={styles.favOverlay}>
+          <View style={[styles.favCard, { backgroundColor: c.surface }]}>
+            <View style={styles.favHeader}>
+              <Text style={styles.favTitle}>★ 我的收藏</Text>
+              <TouchableOpacity onPress={() => setShowFavorites(false)}><Text style={styles.favClose}>关闭</Text></TouchableOpacity>
+            </View>
+            <ScrollView style={styles.favList}>
+              {loadingFavorites ? (
+                <ActivityIndicator size="small" color={c.textSecondary} style={{ marginTop: 40 }} />
+              ) : favoritePosts.length === 0 ? (
+                <View style={styles.favEmpty}><Text style={{ color: c.textSecondary }}>还没有收藏内容</Text></View>
+              ) : (
+                favoritePosts.map((post, i) => (
+                  <View key={post._id || i} style={styles.favItem}>
+                    <Text style={styles.favItemText} numberOfLines={2}>{post.text}</Text>
+                    <View style={styles.favItemMeta}>
+                      <Text style={styles.favItemAuthor}>★ {post.authorName}</Text>
+                      <TouchableOpacity onPress={() => handleUncollect(post)}><Text style={styles.favItemUncollect}>取消收藏</Text></TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* 情绪记忆弹窗 */}
       <Modal visible={showEmotionMemory} transparent animationType="fade" onRequestClose={() => setShowEmotionMemory(false)}>
         <View style={styles.emotionOverlay}>
           <View style={[styles.emotionCard, { backgroundColor: c.surface }]}>
             <View style={styles.emotionHeader}>
               <Text style={[styles.emotionTitle, { color: c.text }]}>心绪历程 🌿</Text>
-              <TouchableOpacity onPress={() => setShowEmotionMemory(false)}>
-                <Text style={[styles.emotionClose, { color: c.textSecondary }]}>关闭</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowEmotionMemory(false)}><Text style={[styles.emotionClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
             </View>
             <ScrollView style={styles.emotionList}>
               {loadingLogs ? (
@@ -128,22 +168,20 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                   <Text style={[styles.emotionEmptySub, { color: c.textSecondary }]}>完成倾诉后，这里会出现你的心绪轨迹</Text>
                 </View>
               ) : (
-                emotionLogs.map((log, index) => (
-                  <View key={log._id || index} style={[styles.emotionItem, { borderBottomColor: c.border }]}>
+                emotionLogs.map((log, i) => (
+                  <View key={log._id || i} style={[styles.emotionItem, { borderBottomColor: c.border }]}>
                     <Text style={[styles.emotionDate, { color: c.textSecondary }]}>
                       {new Date(log.timestamp).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
                     </Text>
                     <View style={styles.emotionKeywords}>
-                      {log.keywords.map((kw: string, i: number) => (
-                        <View key={i} style={[styles.emotionTag, { backgroundColor: c.background }]}>
+                      {(log.keywords || []).map((kw: string, ki: number) => (
+                        <View key={ki} style={[styles.emotionTag, { backgroundColor: c.background }]}>
                           <Text style={[styles.emotionTagText, { color: c.text }]}>{kw}</Text>
                         </View>
                       ))}
                     </View>
                     {log.textExcerpt && (
-                      <Text style={[styles.emotionExcerpt, { color: c.textSecondary }]} numberOfLines={1}>
-                        {log.textExcerpt}
-                      </Text>
+                      <Text style={[styles.emotionExcerpt, { color: c.textSecondary }]} numberOfLines={1}>{log.textExcerpt}</Text>
                     )}
                   </View>
                 ))
@@ -177,6 +215,19 @@ const styles = StyleSheet.create({
   menuIcon: { fontSize: 20, marginRight: 12 },
   menuName: { flex: 1, fontSize: 15 },
   menuArrow: { fontSize: 18 },
+  // 收藏弹窗
+  favOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+  favCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 0, marginHorizontal: 16, width: '90%', maxHeight: '70%', overflow: 'hidden' },
+  favHeader: { padding: 20, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  favTitle: { fontSize: 18, fontWeight: '600', color: '#1F1F1F' },
+  favClose: { fontSize: 15, color: '#999' },
+  favList: { maxHeight: 400 },
+  favEmpty: { alignItems: 'center', paddingVertical: 40 },
+  favItem: { padding: 16, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
+  favItemText: { fontSize: 14, color: '#333', lineHeight: 20 },
+  favItemMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  favItemAuthor: { fontSize: 12, color: '#999' },
+  favItemUncollect: { fontSize: 12, color: '#FF4757' },
   // 情绪记忆弹窗
   emotionOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
   emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, marginHorizontal: 16, width: '90%', maxHeight: '70%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
