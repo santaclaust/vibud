@@ -411,32 +411,29 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   }
 };
 
-/** 暖心（toggle）- 通过 _id 精确查询，避免索引问题 */
-export const toggleWarmth = async (postId: string, userId: string, docId?: string) => {
+/** 暖心（toggle）- 通过 id 字段精确查询，避免索引问题 */
+export const toggleWarmth = async (postId: string, userId: string, createdAt?: number) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleWarmth:', { postId, docId, userId });
+    console.log('[CloudBase] toggleWarmth:', { postId, createdAt, userId });
     
-    if (!postId && !docId) throw new Error('帖子ID为空');
+    // 用 id 字段查询（idx_id 索引已建）
+    const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+    console.log('[CloudBase] 查询结果:', JSON.stringify(r).slice(0, 300));
     
-    let post: CommunityPost;
-    if (docId) {
-      const r = await app!.database().collection('community_posts').doc(docId).get();
-      if (!r.data) throw new Error('帖子不存在');
-      post = r.data as CommunityPost;
-    } else {
-      const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-      if (!r.data?.[0]) throw new Error('帖子不存在');
-      post = r.data[0] as CommunityPost;
-    }
+    if (!r.data?.[0]) throw new Error('帖子不存在');
     
+    const post: any = r.data[0];
     const warmedBy = post.warmedBy || [];
     const hasWarmed = warmedBy.includes(userId);
-    console.log('[CloudBase] hasWarmed:', hasWarmed, 'docId:', post._id);
+    const docId = String(post._id);
+    console.log('[CloudBase] hasWarmed:', hasWarmed, 'docId:', docId);
     
-    await app!.database().collection('community_posts').doc(post._id).update({
+    if (!docId) throw new Error('无法获取文档ID');
+    
+    await app!.database().collection('community_posts').doc(docId).update({
       warmthCount: hasWarmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1,
-      warmedBy: hasWarmed ? warmedBy.filter(u => u !== userId) : [...warmedBy, userId],
+      warmedBy: hasWarmed ? warmedBy.filter((u: string) => u !== userId) : [...warmedBy, userId],
       updatedAt: Date.now(),
     });
     console.log('[CloudBase] 暖心更新成功');
@@ -447,30 +444,26 @@ export const toggleWarmth = async (postId: string, userId: string, docId?: strin
 };
 
 /** 收藏（toggle） */
-export const toggleCollect = async (postId: string, userId: string, docId?: string) => {
+export const toggleCollect = async (postId: string, userId: string, createdAt?: number) => {
   try {
     if (!initialized) await initCloudBase();
-    console.log('[CloudBase] toggleCollect:', { postId, docId, userId });
+    console.log('[CloudBase] toggleCollect:', { postId, userId });
     
-    if (!postId && !docId) throw new Error('帖子ID为空');
+    const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
+    console.log('[CloudBase] 查询结果:', JSON.stringify(r).slice(0, 300));
     
-    let post: CommunityPost;
-    if (docId) {
-      const r = await app!.database().collection('community_posts').doc(docId).get();
-      if (!r.data) throw new Error('帖子不存在');
-      post = r.data as CommunityPost;
-    } else {
-      const r = await app!.database().collection('community_posts').where({ id: postId }).limit(1).get();
-      if (!r.data?.[0]) throw new Error('帖子不存在');
-      post = r.data[0] as CommunityPost;
-    }
+    if (!r.data?.[0]) throw new Error('帖子不存在');
     
+    const post: any = r.data[0];
     const collectedBy = post.collectedBy || [];
     const hasCollected = collectedBy.includes(userId);
-    console.log('[CloudBase] hasCollected:', hasCollected);
+    const docId = String(post._id);
+    console.log('[CloudBase] hasCollected:', hasCollected, 'docId:', docId);
     
-    await app!.database().collection('community_posts').doc(post._id).update({
-      collectedBy: hasCollected ? collectedBy.filter(u => u !== userId) : [...collectedBy, userId],
+    if (!docId) throw new Error('无法获取文档ID');
+    
+    await app!.database().collection('community_posts').doc(docId).update({
+      collectedBy: hasCollected ? collectedBy.filter((u: string) => u !== userId) : [...collectedBy, userId],
       updatedAt: Date.now(),
     });
     console.log('[CloudBase] 收藏更新成功');

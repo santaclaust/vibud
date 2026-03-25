@@ -62,12 +62,12 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const handleWarmth = async (post: any) => {
-    if (!post.id && !post._id) { Alert.alert('帖子数据异常'); return; }
+    if (!post.id) { Alert.alert('帖子数据异常'); return; }
     try {
       const warmed = (post.warmedBy || []).includes(uid);
       const updated = { ...post, warmthCount: warmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1, warmedBy: warmed ? (post.warmedBy || []).filter((u: string) => u !== uid) : [...(post.warmedBy || []), uid] };
       syncPost(updated);
-      await toggleWarmth(post.id, uid, post._id);
+      await toggleWarmth(post.id, uid, post.createdAt);
     } catch (err) {
       syncPost(post);
       console.error('暖心失败:', err);
@@ -76,12 +76,12 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   };
 
   const handleCollect = async (post: any) => {
-    if (!post.id && !post._id) { Alert.alert('帖子数据异常'); return; }
+    if (!post.id && !post.createdAt) { Alert.alert('帖子数据异常'); return; }
     try {
       const collected = (post.collectedBy || []).includes(uid);
       const updated = { ...post, collectedBy: collected ? (post.collectedBy || []).filter((u: string) => u !== uid) : [...(post.collectedBy || []), uid] };
       syncPost(updated);
-      await toggleCollect(post.id, uid, post._id);
+      await toggleCollect(post.id, uid, post.createdAt);
     } catch (err) {
       syncPost(post);
       console.error('收藏失败:', err);
