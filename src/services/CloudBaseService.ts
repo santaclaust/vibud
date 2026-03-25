@@ -393,42 +393,65 @@ export const publishPost = async (post: {
 
 /** 获取社群帖子列表（按分类或全部） */
 export const getCommunityPosts = async (category?: string, limitCount = 50) => {
-  const res = await queryDocuments(
-    'community_posts',
-    category && category !== '全部' ? { category } : undefined,
-    [{ field: 'createdAt', order: 'desc' }],
-    limitCount
-  );
-  return res.data || [];
+  try {
+    const res = await queryDocuments(
+      'community_posts',
+      category && category !== '全部' ? { category } : undefined,
+      undefined, // 暂不排序，避免需要索引
+      limitCount
+    );
+    // 按时间倒序（前端排序）
+    const data = res.data || [];
+    return data.sort((a: any, b: any) => b.createdAt - a.createdAt);
+  } catch (err) {
+    console.error('[CloudBase] getCommunityPosts 失败:', err);
+    return [];
+  }
 };
 
 /** 暖心（toggle） */
 export const toggleWarmth = async (postId: string, userId: string) => {
-  const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
-  if (!posts.data?.[0]) return;
-  const post = posts.data[0] as CommunityPost;
-  const warmedBy = post.warmedBy || [];
-  const hasWarmed = warmedBy.includes(userId);
-  
-  return await updateDocument('community_posts', post._id!, {
-    warmthCount: hasWarmed ? Math.max(0, post.warmthCount - 1) : post.warmthCount + 1,
-    warmedBy: hasWarmed ? warmedBy.filter(u => u !== userId) : [...warmedBy, userId],
-    updatedAt: Date.now(),
-  });
+  try {
+    const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
+    if (!posts.data?.[0]) {
+      console.error('[CloudBase] 未找到帖子:', postId);
+      throw new Error('帖子不存在');
+    }
+    const post = posts.data[0] as CommunityPost;
+    const warmedBy = post.warmedBy || [];
+    const hasWarmed = warmedBy.includes(userId);
+    
+    return await updateDocument('community_posts', post._id!, {
+      warmthCount: hasWarmed ? Math.max(0, (post.warmthCount || 0) - 1) : (post.warmthCount || 0) + 1,
+      warmedBy: hasWarmed ? warmedBy.filter(u => u !== userId) : [...warmedBy, userId],
+      updatedAt: Date.now(),
+    });
+  } catch (err) {
+    console.error('[CloudBase] toggleWarmth 失败:', err);
+    throw err;
+  }
 };
 
 /** 收藏（toggle） */
 export const toggleCollect = async (postId: string, userId: string) => {
-  const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
-  if (!posts.data?.[0]) return;
-  const post = posts.data[0] as CommunityPost;
-  const collectedBy = post.collectedBy || [];
-  const hasCollected = collectedBy.includes(userId);
-  
-  return await updateDocument('community_posts', post._id!, {
-    collectedBy: hasCollected ? collectedBy.filter(u => u !== userId) : [...collectedBy, userId],
-    updatedAt: Date.now(),
-  });
+  try {
+    const posts = await queryDocuments('community_posts', { id: postId }, undefined, 1);
+    if (!posts.data?.[0]) {
+      console.error('[CloudBase] 未找到帖子:', postId);
+      throw new Error('帖子不存在');
+    }
+    const post = posts.data[0] as CommunityPost;
+    const collectedBy = post.collectedBy || [];
+    const hasCollected = collectedBy.includes(userId);
+    
+    return await updateDocument('community_posts', post._id!, {
+      collectedBy: hasCollected ? collectedBy.filter(u => u !== userId) : [...collectedBy, userId],
+      updatedAt: Date.now(),
+    });
+  } catch (err) {
+    console.error('[CloudBase] toggleCollect 失败:', err);
+    throw err;
+  }
 };
 
 // ========== 情绪日志 ==========
