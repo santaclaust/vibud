@@ -11,7 +11,7 @@ interface ProfileScreenProps {
 }
 
 const menuItems = [
-  { id: 'emotion', icon: '🌿', name: '情绪记忆', arrow: '›' },
+  { id: 'emotion', icon: '🌿', name: '心绪历程', arrow: '›' },
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
   { id: 'favorites', icon: '❤️', name: '收藏', arrow: '›' },
   { id: 'settings', icon: '⚙️', name: '设置', arrow: '›' },
@@ -114,7 +114,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
         <View style={styles.emotionOverlay}>
           <View style={[styles.emotionCard, { backgroundColor: c.surface }]}>
             <View style={styles.emotionHeader}>
-              <Text style={[styles.emotionTitle, { color: c.text }]}>情绪记忆 🌿</Text>
+              <Text style={[styles.emotionTitle, { color: c.text }]}>心绪历程 🌿</Text>
               <TouchableOpacity onPress={() => setShowEmotionMemory(false)}>
                 <Text style={[styles.emotionClose, { color: c.textSecondary }]}>关闭</Text>
               </TouchableOpacity>
@@ -125,7 +125,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
               ) : emotionLogs.length === 0 ? (
                 <View style={styles.emotionEmpty}>
                   <Text style={[styles.emotionEmptyText, { color: c.textSecondary }]}>还没有倾诉记录</Text>
-                  <Text style={[styles.emotionEmptySub, { color: c.textSecondary }]}>完成倾诉后，这里会出现你的情绪轨迹</Text>
+                  <Text style={[styles.emotionEmptySub, { color: c.textSecondary }]}>完成倾诉后，这里会出现你的心绪轨迹</Text>
                 </View>
               ) : (
                 emotionLogs.map((log, index) => (
