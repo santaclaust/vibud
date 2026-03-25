@@ -103,12 +103,15 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
     syncPost(updated);
   };
 
-  const formatTime = (ts: number) => {
-    const diff = Date.now() - ts;
+  const formatTime = (ts: number | string | undefined) => {
+    if (!ts) return '';
+    const ms = Number(ts);
+    if (isNaN(ms)) return '';
+    const diff = Date.now() - ms;
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
     if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-    return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    return new Date(ms).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
   };
 
   const isWarmed = (post: any) => (post.warmedBy || []).includes(uid);
