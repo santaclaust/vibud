@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, FlatList, KeyboardAvoidingView, Platform, Modal, ScrollView, Alert, Animated, Easing } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { storageService, TimeMachineEntry } from '../services/StorageService';
 import notificationService from '../services/NotificationService';
 
@@ -81,7 +82,7 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
     successIcon: { fontSize: 40, marginBottom: 12 },
     successText: { fontSize: 16, fontWeight: '600' as const, color: colors.text, marginBottom: 4 },
     successSubtext: { fontSize: 13, color: colors.textSecondary },
-    detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center' as const, alignItems: 'stretch' as const, paddingHorizontal: 0 },
+    detailOverlay: { flex: 1, justifyContent: 'center' as const, alignItems: 'stretch' as const, overflow: 'hidden' as const },
     detailCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginHorizontal: 16, maxHeight: '70%' as const, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
     detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 4 },
     detailDate: { fontSize: 16, fontWeight: '600' as const, color: colors.text },
@@ -486,7 +487,7 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
         </Modal>
 
         <Modal visible={!!selectedEntry} transparent animationType="fade" onRequestClose={() => setSelectedEntry(null)}>
-          <View style={s.detailOverlay}>
+          <BlurView intensity={50} tint="dark" style={s.detailOverlay}>
             <View style={s.detailCard}>
               {selectedEntry && (<>
                 <View style={s.detailHeader}>
@@ -501,7 +502,7 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
                 </TouchableOpacity>
               </>)}
             </View>
-          </View>
+          </BlurView>
         </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
