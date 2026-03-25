@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { getEmotionLogs } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -10,6 +11,7 @@ interface ProfileScreenProps {
 }
 
 const menuItems = [
+  { id: 'emotion', icon: '🌿', name: '情绪记忆', arrow: '›' },
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
   { id: 'favorites', icon: '❤️', name: '收藏', arrow: '›' },
   { id: 'settings', icon: '⚙️', name: '设置', arrow: '›' },
@@ -27,9 +29,29 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   // 统计数据
   const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, continuousDays: 0 };
 
+  // 情绪记忆弹窗
+  const [showEmotionMemory, setShowEmotionMemory] = useState(false);
+  const [emotionLogs, setEmotionLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
   const handleMenuPress = (itemId: string) => {
-    // TODO: 实现各菜单功能
-    console.log('点击菜单:', itemId);
+    if (itemId === 'emotion') {
+      openEmotionMemory();
+    }
+  };
+
+  const openEmotionMemory = async () => {
+    setShowEmotionMemory(true);
+    setLoadingLogs(true);
+    try {
+      const uid = userId || 'guest';
+      const logs = await getEmotionLogs(uid, 30);
+      setEmotionLogs(logs);
+    } catch (err) {
+      console.error('获取情绪日志失败:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
   };
 
   return (
@@ -86,6 +108,50 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
           ))}
         </View>
       </ScrollView>
+
+      {/* 情绪记忆弹窗 */}
+      <Modal visible={showEmotionMemory} transparent animationType="fade" onRequestClose={() => setShowEmotionMemory(false)}>
+        <View style={styles.emotionOverlay}>
+          <View style={[styles.emotionCard, { backgroundColor: c.surface }]}>
+            <View style={styles.emotionHeader}>
+              <Text style={[styles.emotionTitle, { color: c.text }]}>情绪记忆 🌿</Text>
+              <TouchableOpacity onPress={() => setShowEmotionMemory(false)}>
+                <Text style={[styles.emotionClose, { color: c.textSecondary }]}>关闭</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.emotionList}>
+              {loadingLogs ? (
+                <ActivityIndicator size="small" color={c.textSecondary} style={{ marginTop: 40 }} />
+              ) : emotionLogs.length === 0 ? (
+                <View style={styles.emotionEmpty}>
+                  <Text style={[styles.emotionEmptyText, { color: c.textSecondary }]}>还没有倾诉记录</Text>
+                  <Text style={[styles.emotionEmptySub, { color: c.textSecondary }]}>完成倾诉后，这里会出现你的情绪轨迹</Text>
+                </View>
+              ) : (
+                emotionLogs.map((log, index) => (
+                  <View key={log._id || index} style={[styles.emotionItem, { borderBottomColor: c.border }]}>
+                    <Text style={[styles.emotionDate, { color: c.textSecondary }]}>
+                      {new Date(log.timestamp).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </Text>
+                    <View style={styles.emotionKeywords}>
+                      {log.keywords.map((kw: string, i: number) => (
+                        <View key={i} style={[styles.emotionTag, { backgroundColor: c.background }]}>
+                          <Text style={[styles.emotionTagText, { color: c.text }]}>{kw}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {log.textExcerpt && (
+                      <Text style={[styles.emotionExcerpt, { color: c.textSecondary }]} numberOfLines={1}>
+                        {log.textExcerpt}
+                      </Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -111,4 +177,20 @@ const styles = StyleSheet.create({
   menuIcon: { fontSize: 20, marginRight: 12 },
   menuName: { flex: 1, fontSize: 15 },
   menuArrow: { fontSize: 18 },
+  // 情绪记忆弹窗
+  emotionOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+  emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, marginHorizontal: 16, width: '90%', maxHeight: '70%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
+  emotionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  emotionTitle: { fontSize: 18, fontWeight: '600' },
+  emotionClose: { fontSize: 15 },
+  emotionList: { maxHeight: 400 },
+  emotionEmpty: { alignItems: 'center', paddingVertical: 40 },
+  emotionEmptyText: { fontSize: 15 },
+  emotionEmptySub: { fontSize: 13, marginTop: 8, textAlign: 'center' },
+  emotionItem: { paddingVertical: 14, borderBottomWidth: 1 },
+  emotionDate: { fontSize: 13, marginBottom: 8 },
+  emotionKeywords: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  emotionTag: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  emotionTagText: { fontSize: 13, fontWeight: '500' },
+  emotionExcerpt: { fontSize: 13, marginTop: 4 },
 });
