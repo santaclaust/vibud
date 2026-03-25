@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { aiService } from '../services/AIService';
 import { storageService } from '../services/StorageService';
 import { saveEmotionLog, extractEmotionKeywords } from '../services/CloudBaseService';
@@ -54,6 +54,9 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     sendButton: { flex: 1, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center' as const, alignItems: 'center' as const },
     sendButtonDisabled: { backgroundColor: '#B0D4F1' },
     sendButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
+    completionHint: { alignItems: 'center' as const, marginTop: 20, paddingVertical: 16, paddingHorizontal: 20, marginHorizontal: 20, backgroundColor: colors.background, borderRadius: 16 },
+    completionHintText: { fontSize: 15, color: colors.textSecondary, marginBottom: 6 },
+    completionKeywords: { fontSize: 13, color: colors.primary, fontWeight: '500' as const },
   };
 
   const [text, setText] = useState('');
@@ -61,8 +64,10 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
   const [isModeSelectorVisible, setModeSelectorVisible] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationDone, setConversationDone] = useState(false);
+  const [showCompletionHint, setShowCompletionHint] = useState(false);
+  const [emotionKeywords, setEmotionKeywords] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 加载草稿
   useEffect(() => { loadDraft(); }, []);
@@ -83,9 +88,11 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     if (!text.trim() || isLoading) return;
     const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: text.trim(), timestamp: Date.now() };
     setMessages(prev => [...prev, userMessage]);
-    setConversationDone(true);
+    setShowCompletionHint(false);
     setText('');
     scrollToBottom();
+    // 取消之前的自动保存计时器
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     if (selectedMode === 'heal' || selectedMode === 'consult') {
       setIsLoading(true);
       try {
@@ -93,6 +100,12 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         const assistantMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: response.text, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMessage]);
         scrollToBottom();
+        
+        // AI回复后，启动60秒自动保存计时器
+        autoSaveTimer.current = setTimeout(() => {
+          triggerEmotionSave();
+        }, 60000);
+        
       } catch (error) { console.error('AI回复失败:', error); } 
       finally { setIsLoading(false); }
     } else if (selectedMode === 'treehole') {
@@ -102,19 +115,14 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     }
   };
 
-  const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); setConversationDone(false); };
+  const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); setShowCompletionHint(false); };
 
-  // 结束倾诉，提取情绪关键词并保存
-  const handleEndConversation = async () => {
-    if (messages.length === 0) return;
+  // 自动保存情绪关键词（静默）
+  const triggerEmotionSave = async () => {
+    if (messages.length === 0 || showCompletionHint) return;
     const uid = userId || 'guest';
-    
-    // 合并对话文本
     const fullText = messages.map(m => m.content).join('。');
-    if (fullText.length < 5) {
-      Alert.alert('对话太短', '请多说一些，让我更好地理解你');
-      return;
-    }
+    if (fullText.length < 5) return;
     
     try {
       const keywords = extractEmotionKeywords(fullText);
@@ -124,19 +132,10 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         textExcerpt: fullText.slice(0, 50),
         timestamp: Date.now(),
       });
-      
-      Alert.alert(
-        '已记录情绪 🌱',
-        `关键词：${keywords.join('、')}\n\n感谢你的倾诉，希望今天的对话对你有帮助。`,
-        [{ text: '好的', onPress: () => {
-          setMessages([]);
-          setConversationDone(false);
-          setText('');
-        }}]
-      );
+      setEmotionKeywords(keywords);
+      setShowCompletionHint(true);
     } catch (err) {
       console.error('保存情绪日志失败:', err);
-      Alert.alert('提示', '倾诉已完成，感谢你的信任。');
     }
   };
 
@@ -179,18 +178,21 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
             </View>
           ) : (messages.map((msg) => renderMessage({ item: msg })))}
           {isLoading && <View style={[s.messageContainer, s.assistantMessageContainer]}><View style={[s.messageBubble, s.assistantBubble]}><ActivityIndicator size="small" color={colors.primary} /></View></View>}
+          {showCompletionHint && (
+            <View style={s.completionHint}>
+              <Text style={s.completionHintText}>倾诉已完成 🌱</Text>
+              {emotionKeywords.length > 0 && (
+                <Text style={s.completionKeywords}>{emotionKeywords.join(' · ')}</Text>
+              )}
+            </View>
+          )}
         </ScrollView>
         <View style={s.inputArea}>
           <ScrollView keyboardShouldPersistTaps="handled"><TextInput style={s.textInput} placeholder="写下你的心情..." placeholderTextColor="#999" multiline value={text} onChangeText={setText} textAlignVertical="top" editable={!isLoading} /></ScrollView>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 }}>
             <TouchableOpacity style={[s.sendButton, (!text.trim() || isLoading) && s.sendButtonDisabled]} onPress={handleSend} disabled={!text.trim() || isLoading}>
               <Text style={s.sendButtonText}>{isLoading ? '发送中...' : '发送'}</Text>
             </TouchableOpacity>
-            {messages.filter(m => m.role === 'user').length >= 1 && (
-              <TouchableOpacity style={{ flex: 1, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }} onPress={handleEndConversation}>
-                <Text style={{ fontSize: 16, color: colors.textSecondary }}>结束倾诉</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </KeyboardAvoidingView>
