@@ -369,6 +369,18 @@ export const getEmotionLogs = async (userId: string, limitCount = 30) => {
   return res.data || [];
 };
 
+/** 获取近N天的情绪日志（用于RAG上下文） */
+export const getRecentEmotionLogs = async (userId: string, days = 7) => {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const res = await queryDocuments(
+    'emotion_logs',
+    { userId },
+    [{ field: 'timestamp', order: 'desc' }],
+    50
+  );
+  return (res.data || []).filter((log: EmotionLog) => log.timestamp >= cutoff);
+};
+
 // ========== 情绪关键词提取（本地规则） ==========
 
 /** 情绪词库 */

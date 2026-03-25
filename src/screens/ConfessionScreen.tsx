@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { aiService } from '../services/AIService';
 import { storageService } from '../services/StorageService';
-import { saveEmotionLog, extractEmotionKeywords } from '../services/CloudBaseService';
+import { saveEmotionLog, extractEmotionKeywords, getRecentEmotionLogs } from '../services/CloudBaseService';
 import { notifyEmotionSaved } from '../services/CloudNotificationService';
 
 interface ModeOption { id: string; name: string; icon: string; description: string; }
@@ -97,7 +97,13 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     if (selectedMode === 'heal' || selectedMode === 'consult') {
       setIsLoading(true);
       try {
-        const response = await aiService.getResponse(userMessage.content, selectedMode as 'heal' | 'consult');
+        // 获取近7天情绪历史作为AI上下文
+        const emotionHistory = await getEmotionContext();
+        const response = await aiService.getResponse(
+          userMessage.content,
+          selectedMode as 'heal' | 'consult',
+          emotionHistory
+        );
         const assistantMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: response.text, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMessage]);
         scrollToBottom();
@@ -133,12 +139,21 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         textExcerpt: fullText.slice(0, 50),
         timestamp: Date.now(),
       });
-      // 同时发送通知
       notifyEmotionSaved(keywords, uid);
       setEmotionKeywords(keywords);
       setShowCompletionHint(true);
     } catch (err) {
       console.error('保存情绪日志失败:', err);
+    }
+  };
+
+  // 获取近7天情绪历史作为AI上下文
+  const getEmotionContext = async (): Promise<any[]> => {
+    const uid = userId || 'guest';
+    try {
+      return await getRecentEmotionLogs(uid, 7);
+    } catch {
+      return [];
     }
   };
 
