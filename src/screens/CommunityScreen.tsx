@@ -6,12 +6,16 @@ import {
 } from 'react-native';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect } from '../services/CloudBaseService';
 
-const CATEGORIES = ['全部', '职场', '生活', '情感', '其他'];
+const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
 const CATEGORY_COLORS: Record<string, string> = {
-  '全部': '#666', '职场': '#5B8DEF', '生活': '#4CAF50', '情感': '#FF7E7E', '其他': '#9E9E9E',
+  '全部': '#666', '情绪': '#E57373', '心理': '#9575CD', '家庭': '#FF8A65',
+  '爱情': '#F06292', '职场': '#5B8DEF', '学业': '#4FC3F7', '生活': '#81C784',
+  '成长': '#AED581', '互助': '#FFD54F', '吐槽': '#90A4AE', '其他': '#BDBDBD',
 };
 const CATEGORY_BG: Record<string, string> = {
-  '全部': '#F5F5F5', '职场': '#EEF3FF', '生活': '#F0FFF4', '情感': '#FFF0F0', '其他': '#F5F5F5',
+  '全部': '#F5F5F5', '情绪': '#FFF0F0', '心理': '#F3EFFF', '家庭': '#FFF3E0',
+  '爱情': '#FCE4EC', '职场': '#EEF3FF', '学业': '#E1F5FE', '生活': '#F0FFF4',
+  '成长': '#F1F8E9', '互助': '#FFFDE7', '吐槽': '#ECEFF1', '其他': '#F5F5F5',
 };
 
 export default function CommunityScreen({ navigation, colors, userId }: any) {
@@ -23,7 +27,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [postText, setPostText] = useState('');
-  const [postCategory, setPostCategory] = useState('生活');
+  const [postCategory, setPostCategory] = useState('情绪');
   const [posting, setPosting] = useState(false);
 
   const fetchPosts = useCallback(async () => {
@@ -227,7 +231,7 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
             {/* 分类选择 */}
             <Text style={[styles.modalSectionLabel, { color: c.textSecondary }]}>选择分类</Text>
             <View style={styles.modalCatRow}>
-              {CATEGORIES.slice(1).map(cat => (
+              {CATEGORIES.filter(c => c !== '全部').map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.modalCatTag, {
@@ -300,7 +304,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '600' },
   modalPublish: { fontSize: 15, fontWeight: '600' },
   modalSectionLabel: { fontSize: 12, marginBottom: 10 },
-  modalCatRow: { flexDirection: 'row', marginBottom: 16, gap: 8, flexWrap: 'wrap' },
+  modalCatRow: { flexDirection: 'row', marginBottom: 16, gap: 8, flexWrap: 'wrap', maxWidth: '100%' },
   modalCatTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
   modalInput: { borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 23, minHeight: 120, textAlignVertical: 'top' },
   charCount: { textAlign: 'right', fontSize: 12, marginTop: 8 },
