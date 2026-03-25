@@ -94,7 +94,8 @@ export const onAuthStateChange = (callback: (user: any) => void) => {
  */
 export const addDocument = async (collName: string, data: object) => {
   if (!initialized) await initCloudBase();
-  return await app!.database().collection(collName).add({ data });
+  // 直接传对象，不用 { data: {} } 包装（避免查询返回 doc.data.xxx 嵌套）
+  return await app!.database().collection(collName).add(data);
 };
 
 /**
@@ -413,9 +414,12 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
     const docs = r.data || [];
     console.log('[CloudBase] getCommunityPosts 条数:', docs.length);
     const data = docs.map((doc: any) => {
-      const id = doc.id || doc._id || '';
-      console.log('[CloudBase] doc:', id, 'text:', doc.text?.slice(0, 20));
-      return { ...doc, id, docId: id };
+      // CloudBase add后查询返回格式：实际字段在 data 字段内（嵌套结构）
+      // 需要解包：doc.data.{fields} → flat.{fields}
+      const inner = doc.data || doc;
+      const id = inner.id || doc._id || '';
+      console.log('[CloudBase] doc id:', id, 'text:', inner.text?.slice(0, 20));
+      return { ...inner, _id: doc._id, id, docId: id };
     });
     return data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (err) {
