@@ -15,8 +15,11 @@ const CATEGORY_BG: Record<string, string> = {
   '成长': '#F1F8E9', '互助': '#FFFDE7', '吐槽': '#ECEFF1', '其他': '#F5F5F5',
 };
 
-export default function CommunityScreen({ navigation, colors, userId }: any) {
+export default function CommunityScreen({ navigation, colors, userId, themeMode }: any) {
   const c = colors || { background: '#F2F3F5', surface: '#FFFFFF', text: '#1F1F1F', textSecondary: '#999', border: '#E5E5E5', primary: '#4A90E2' };
+  const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const overlayBg = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)';
+  const blurTint = isDark ? 'dark' : 'light';
   const uid = userId || 'guest';
 
   const [posts, setPosts] = useState<any[]>([]);
@@ -232,8 +235,11 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       </TouchableOpacity>
 
       {/* 发布弹窗 */}
-      <Modal visible={showPostModal} transparent animationType="slide" onRequestClose={() => setShowPostModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+      <Modal visible={showPostModal} transparent animationType="none" onRequestClose={() => setShowPostModal(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} activeOpacity={1} onPress={() => { console.log('[发布] 点击关闭'); setShowPostModal(false); }}>
+          <BlurView intensity={60} tint={blurTint} style={StyleSheet.absoluteFill} />
+        </TouchableOpacity>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', pointerEvents: 'box-none' }}>
           <View style={[styles.modalCard, { backgroundColor: c.surface }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setShowPostModal(false)}><Text style={[styles.modalCancel, { color: c.textSecondary }]}>取消</Text></TouchableOpacity>
@@ -261,12 +267,11 @@ export default function CommunityScreen({ navigation, colors, userId }: any) {
       </Modal>
 
       {/* 评论弹窗 - 苹果风格居中卡片+虚化背景 */}
-      <Modal visible={!!commentPost} transparent animationType="fade" onRequestClose={() => setCommentPost(null)}>
-        <View style={styles.commentOverlay}>
-          {/* 苹果虚化背景 */}
-          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-          {/* 半透明遮罩点击关闭 */}
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCommentPost(null)} activeOpacity={1} />
+      <Modal visible={!!commentPost} transparent animationType="none" onRequestClose={() => setCommentPost(null)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} activeOpacity={1} onPress={() => { console.log('[评论] 点击关闭'); setCommentPost(null); }}>
+          <BlurView intensity={80} tint={blurTint} style={StyleSheet.absoluteFill} />
+        </TouchableOpacity>
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', pointerEvents: 'box-none' }}>
           {/* 居中卡片 */}
           <View style={[styles.commentCard, { backgroundColor: c.surface }]}>
             {/* 卡片头部 */}

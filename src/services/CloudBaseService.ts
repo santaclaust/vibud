@@ -54,6 +54,17 @@ export const getCurrentUser = async () => {
 };
 
 /**
+ * 自定义登录 - 用任意用户名创建本地用户（无需 CloudBase 认证）
+ * 用于测试多用户场景
+ */
+export const customLogin = async (username: string): Promise<string> => {
+  // 生成本地用户 ID
+  const userId = `user_${username}_${Date.now()}`;
+  console.log('[CloudBase] customLogin:', userId);
+  return userId;
+};
+
+/**
  * 匿名登录（最快速，无需配置）
  * 适合 MVP 阶段先跑通功能
  */
@@ -72,11 +83,63 @@ export const signInWithPhone = async (phoneNumber: string, phoneCode: string) =>
 };
 
 /**
- * 退出登录
+ * 退出登录 - 强制创建新匿名用户
  */
 export const logout = async () => {
   if (!initialized) await initCloudBase();
-  return await app!.auth({ persistence: 'local' }).signOut();
+  console.log('[CloudBase] logout 开始');
+  try {
+    // 先退出当前用户
+    console.log('[CloudBase] 执行 signOut');
+    await app!.auth({ persistence: 'local' }).signOut();
+    console.log('[CloudBase] signOut 完成');
+    
+    // 清除所有可能的认证相关 localStorage
+    console.log('[CloudBase] 清除 localStorage');
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('auth') || key.includes('user') || key.includes('token'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => {
+        localStorage.removeItem(k);
+        console.log('[CloudBase] 清除:', k);
+      });
+    } catch (e) {
+      console.log('[CloudBase] 清除 localStorage 跳过', e);
+    }
+    
+    // 清除 sessionStorage 也试试
+    try {
+      sessionStorage.clear();
+      console.log('[CloudBase] sessionStorage 已清除');
+    } catch (e) {}
+    
+    // 延迟一下确保状态清理完成
+    await new Promise(r => setTimeout(r, 300));
+    console.log('[CloudBase] 延迟完成，准备重新登录');
+    
+    // 尝试用不同的方式创建新匿名用户
+    // 先获取当前用户确认已退出
+    const currentBefore = await app!.auth({ persistence: 'local' }).hasLoginState();
+    console.log('[CloudBase] 登录前状态:', currentBefore);
+    
+    // 重新匿名登录
+    const result = await signInAnonymously();
+    console.log('[CloudBase] 新登录完成，返回:', result);
+    
+    // 验证新用户
+    const currentAfter = await app!.auth({ persistence: 'local' }).hasLoginState();
+    console.log('[CloudBase] 登录后状态:', currentAfter?.user?.uid);
+    
+    return result;
+  } catch (err) {
+    console.error('[CloudBase] logout 失败:', err);
+    throw err;
+  }
 };
 
 /**
@@ -438,47 +501,48 @@ export const getUserPostStates = async (postIds: string[], userId: string) => {
   }
 };
 
-/** 查询某用户是否暖心过某帖子 - 独立 likes 集合，不再存数组 */
-const getPostLikes = async (postId: string, userId: string) => {
+/** 查询某帖子是否有任何点赞（返回是否有记录，前端自行判断 userId） */
+const getPostLikesCount = async (postId: string) => {
   if (!initialized) await initCloudBase();
   const r = await app!.database().collection('likes')
-    .where({ postId, userId })
-    .limit(1).get();
-  return r.data?.length > 0;
+    .where({ postId })
+    .get();
+  return r.data || [];
 };
 
-/** 查询某用户是否收藏过某帖子 */
-const getPostCollects = async (postId: string, userId: string) => {
+/** 查询某帖子是否有任何收藏（同理） */
+const getPostCollectsCount = async (postId: string) => {
   if (!initialized) await initCloudBase();
   const r = await app!.database().collection('favorites')
-    .where({ postId, userId }).limit(1).get();
-  return r.data?.length > 0;
+    .where({ postId })
+    .get();
+  return r.data || [];
 };
 
-/** 暖心（toggle）- likes 集合存记录，likeCount 为计数器 */
+/** 暖心（toggle）- likes 集合存记录，likeCount 从 likes 集合实时统计 */
 export const toggleWarmth = async (postId: string, userId: string) => {
   try {
     if (!initialized) await initCloudBase();
     const cloudBaseId = String(postId); // 确保是字符串
-    const postR = await app!.database().collection('community_posts').doc(cloudBaseId).get();
-    if (!postR.data) throw new Error('帖子不存在');
-    const post: any = postR.data;
-    const inner = post.data || {};
-    const currentCount = post.likeCount ?? inner.likeCount ?? 0;
     
-    const hasLiked = await getPostLikes(cloudBaseId, userId);
+    // 查询该帖子所有点赞记录
+    const allLikes = await getPostLikesCount(cloudBaseId);
+    const currentCount = allLikes.length;
+    const hasLiked = allLikes.some((d: any) => d.userId === userId);
     
     if (hasLiked) {
-      const likeR = await app!.database().collection('likes')
-        .where({ postId: cloudBaseId, userId }).limit(1).get();
-      if (likeR.data?.[0]) {
-        await app!.database().collection('likes').doc(likeR.data[0]._id).remove();
+      // 取消暖心：删除当前用户的记录
+      const likeToRemove = allLikes.find((d: any) => d.userId === userId);
+      if (likeToRemove) {
+        await app!.database().collection('likes').doc(likeToRemove._id).remove();
       }
-      await app!.database().collection('community_posts').doc(cloudBaseId).update({ likeCount: Math.max(0, currentCount - 1) });
     } else {
+      // 添加暖心：新增记录
       await app!.database().collection('likes').add({ postId: cloudBaseId, userId, createTime: Date.now() });
-      await app!.database().collection('community_posts').doc(cloudBaseId).update({ likeCount: currentCount + 1 });
     }
+    // 实时更新帖子 likes 集合的记录数（即真实点赞数）
+    const newCount = hasLiked ? currentCount - 1 : currentCount + 1;
+    await app!.database().collection('community_posts').doc(cloudBaseId).update({ likeCount: newCount });
   } catch (err) {
     console.error('[CloudBase] toggleWarmth 失败:', err);
     throw err;
@@ -490,15 +554,18 @@ export const toggleCollect = async (postId: string, userId: string) => {
     if (!initialized) await initCloudBase();
     const cloudBaseId = postId;
     
-    const hasCollected = await getPostCollects(cloudBaseId, userId);
+    // 查询该帖子所有收藏记录
+    const allCollects = await getPostCollectsCount(cloudBaseId);
+    const hasCollected = allCollects.some((d: any) => d.userId === userId);
     
     if (hasCollected) {
-      const r = await app!.database().collection('favorites')
-        .where({ postId: cloudBaseId, userId }).limit(1).get();
-      if (r.data?.[0]) {
-        await app!.database().collection('favorites').doc(r.data[0]._id).remove();
+      // 取消收藏：删除当前用户的记录
+      const collectToRemove = allCollects.find((d: any) => d.userId === userId);
+      if (collectToRemove) {
+        await app!.database().collection('favorites').doc(collectToRemove._id).remove();
       }
     } else {
+      // 添加收藏：新增记录
       await app!.database().collection('favorites').add({ postId: cloudBaseId, userId, createTime: Date.now() });
     }
   } catch (err) {
@@ -509,12 +576,14 @@ export const toggleCollect = async (postId: string, userId: string) => {
 
 /** 判断某用户是否暖心过某帖子（用于渲染状态） */
 export const isPostWarmedByUser = async (postId: string, userId: string): Promise<boolean> => {
-  return getPostLikes(postId, userId);
+  const allLikes = await getPostLikesCount(postId);
+  return allLikes.some((d: any) => d.userId === userId);
 };
 
 /** 判断某用户是否收藏过某帖子 */
 export const isPostCollectedByUser = async (postId: string, userId: string): Promise<boolean> => {
-  return getPostCollects(postId, userId);
+  const allCollects = await getPostCollectsCount(postId);
+  return allCollects.some((d: any) => d.userId === userId);
 };
 
 /** 批量取消收藏 */
@@ -591,16 +660,57 @@ export const getPostById = async (postId: string) => {
 export const getFavoritePosts = async (userId: string) => {
   if (!initialized) await initCloudBase();
   try {
-    console.log('[CloudBase] getFavoritePosts userId:', userId);
-    // 查 favorites 集合
+    console.log('[CloudBase] ===== getFavoritePosts 开始 =====');
+    console.log('[CloudBase] userId:', userId);
+    
+    // 步骤1: 查 favorites 集合
+    console.log('[CloudBase] 步骤1: 查询 favorites 集合...');
     const favR = await app!.database().collection('favorites').where({ userId }).get();
+    console.log('[CloudBase] favorites 返回:', JSON.stringify(favR.data));
+    
     const postIds: string[] = (favR.data || []).map((d: any) => d.postId);
-    console.log('[CloudBase] favorites 查询结果:', favR.data?.length, '条, postIds:', postIds);
-    if (postIds.length === 0) return [];
-    // 批量查帖子
-    const posts = await Promise.all(postIds.map((id: string) => app!.database().collection('community_posts').doc(id).get()));
-    const result = posts.map((r: any) => r.data).filter(Boolean);
-    console.log('[CloudBase] getFavoritePosts 返回:', result.length, '条');
+    console.log('[CloudBase] postIds:', postIds);
+    
+    if (postIds.length === 0) {
+      console.log('[CloudBase] 没有收藏记录，返回空数组');
+      return [];
+    }
+    
+    // 步骤2: 批量查帖子
+    console.log('[CloudBase] 步骤2: 批量查询帖子...');
+    const posts = await Promise.all(postIds.map((id: string) => {
+      console.log('[CloudBase] 查询帖子:', id);
+      return app!.database().collection('community_posts').doc(id).get();
+    }));
+    
+    console.log('[CloudBase] 帖子查询结果:');
+    posts.forEach((r: any, i: number) => {
+      console.log(`[CloudBase]   帖子${i}:`, JSON.stringify(r.data));
+    });
+    
+    // 步骤3: 格式化数据 - r.data 是数组 [doc]，取第一个元素
+    console.log('[CloudBase] 步骤3: 格式化数据...');
+    const result = posts.map((r: any) => {
+      // r.data 可能是数组 [doc] 或直接是 doc 对象
+      const doc = Array.isArray(r.data) ? r.data[0] : r.data;
+      if (!doc) return null;
+      // 直接从 doc 取字段
+      const formatted = {
+        _id: doc._id || '',
+        text: doc.text || '',
+        authorName: doc.authorName || '未知',
+        category: doc.category || '',
+        likeCount: doc.likeCount ?? 0,
+        commentCount: doc.commentCount ?? 0,
+        shareCount: doc.shareCount ?? 0,
+        createTime: doc.createTime || 0,
+      };
+      console.log('[CloudBase] 格式化后:', JSON.stringify(formatted));
+      return formatted;
+    }).filter(Boolean);
+    
+    console.log('[CloudBase] 最终返回:', result.length, '条');
+    console.log('[CloudBase] ===== getFavoritePosts 结束 =====');
     return result;
   } catch (err) {
     console.error('[CloudBase] getFavoritePosts 失败:', err);

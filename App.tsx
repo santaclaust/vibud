@@ -11,7 +11,7 @@ import TabBar from './src/components/TabBar';
 import CenterMenu from './src/components/CenterMenu';
 import themeManager, { ThemeMode, lightTheme, darkTheme } from './src/services/ThemeManager';
 import notificationService from './src/services/NotificationService';
-import { initCloudBase, signInAnonymously, getAuthState, saveUserProfile, getUserProfile } from './src/services/CloudBaseService';
+import { initCloudBase, signInAnonymously, getAuthState, saveUserProfile, getUserProfile, logout, customLogin } from './src/services/CloudBaseService';
 
 type ScreenName = 'Home' | 'Confession' | 'Message' | 'Profile' | 'Community' | 'TreeHole' | 'TimeMachine';
 
@@ -83,7 +83,32 @@ export default function App() {
       themeMode, 
       onThemeChange: setThemeMode,
       userId,
-      userInfo
+      userInfo,
+      onLogout: async () => {
+        console.log('[App] onLogout 开始');
+        // 退出后重新登录，获取新用户
+        try {
+          const result = await logout();
+          console.log('[App] logout 返回:', result);
+          const authState = await getAuthState();
+          console.log('[App] getAuthState 结果:', authState?.user?.uid);
+          if (authState?.user) {
+            const newUid = authState.user.uid;
+            console.log('[App] 切换用户从', userId, '到', newUid);
+            setUserId(newUid);
+            setUserInfo({ nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
+          }
+        } catch (err) {
+          console.error('[App] 重新登录失败:', err);
+        }
+      },
+      onCustomLogin: async (username: string) => {
+        console.log('[App] onCustomLogin:', username);
+        const newUid = `user_${username}_${Date.now()}`;
+        console.log('[App] 切换用户从', userId, '到', newUid);
+        setUserId(newUid);
+        setUserInfo({ nickname: username, stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
+      }
     };
     
     return (

@@ -181,13 +181,11 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                   </TouchableOpacity>
                   <Text style={[styles.favTitle, { color: c.text }]}>{selectedFavorites.size}/{favoritePosts.length} 已选</Text>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <TouchableOpacity onPress={() => { setEditMode(false); setSelectedFavorites(new Set()); }}>
-                      <Text style={{ color: c.textSecondary, fontSize: 18 }}>×</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity onPress={handleBatchUncollect} disabled={selectedFavorites.size === 0}>
-                      <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15, fontWeight: '600' }}>
-                        取消{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}
-                      </Text>
+                      <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15 }}>取消{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setEditMode(false); setSelectedFavorites(new Set()); }}>
+                      <Text style={{ color: c.textSecondary, fontSize: 15 }}>关闭</Text>
                     </TouchableOpacity>
                   </View>
                 </>
