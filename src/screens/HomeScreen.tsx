@@ -473,15 +473,16 @@ const styles = StyleSheet.create({
   imageContainer: {
     marginHorizontal: 20,
     marginTop: 16,
+    marginBottom: 60, // 为 Tab Bar 留空间，衔接
     flex: 1,
     minHeight: 200,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backgroundImage: { width: '100%', height: '100%' },
+  backgroundImage: { width: '100%', height: '100%', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   loadingText: { marginTop: 12, fontSize: 14 },
   sourceTag: {
     position: 'absolute',

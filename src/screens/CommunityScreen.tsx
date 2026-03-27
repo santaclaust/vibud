@@ -4,6 +4,7 @@ import { BlurView } from 'expo-blur';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments } from '../services/CloudBaseService';
 
 const CATEGORIES = ['情绪', '生活', '心理', '成长', '家庭', '互助', '爱情', '吐槽', '职场', '其他', '学业', '全部'];
+const MAIN_CATEGORIES = ['全部']; // 默认显示
 const CATEGORY_COLORS: Record<string, string> = {
   '全部': '#666', '情绪': '#E57373', '心理': '#9575CD', '家庭': '#FF8A65',
   '爱情': '#F06292', '职场': '#5B8DEF', '学业': '#4FC3F7', '生活': '#81C784',
@@ -24,6 +25,7 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
 
   const [posts, setPosts] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
+  const [categoryExpanded, setCategoryExpanded] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -233,11 +235,28 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
       </View>
       <View style={[styles.categoryWrap, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8 }}>
-          {CATEGORIES.map(cat => (
-            <TouchableOpacity key={cat} style={[styles.catTag, { backgroundColor: activeCategory === cat ? CATEGORY_COLORS[cat] : c.surface, borderColor: CATEGORY_COLORS[cat] }]} onPress={() => setActiveCategory(cat)}>
-              <Text style={[styles.catTagText, { color: activeCategory === cat ? '#FFF' : CATEGORY_COLORS[cat] }]}>{cat}</Text>
-            </TouchableOpacity>
-          ))}
+          {!categoryExpanded && (
+            <>
+              <TouchableOpacity style={[styles.catTag, { backgroundColor: activeCategory === '全部' ? CATEGORY_COLORS['全部'] : c.surface, borderColor: CATEGORY_COLORS['全部'] }]} onPress={() => setActiveCategory('全部')}>
+                <Text style={[styles.catTagText, { color: activeCategory === '全部' ? '#FFF' : CATEGORY_COLORS['全部'] }]}>全部</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.catTag, { backgroundColor: c.surface, borderColor: c.border }]} onPress={() => setCategoryExpanded(true)}>
+                <Text style={[styles.catTagText, { color: c.textSecondary }]}>+ 更多</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {categoryExpanded && (
+            <>
+              {CATEGORIES.map(cat => (
+                <TouchableOpacity key={cat} style={[styles.catTag, { backgroundColor: activeCategory === cat ? CATEGORY_COLORS[cat] : c.surface, borderColor: CATEGORY_COLORS[cat] }]} onPress={() => setActiveCategory(cat)}>
+                  <Text style={[styles.catTagText, { color: activeCategory === cat ? '#FFF' : CATEGORY_COLORS[cat] }]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={[styles.catTag, { backgroundColor: c.surface, borderColor: c.border }]} onPress={() => setCategoryExpanded(false)}>
+                <Text style={[styles.catTagText, { color: c.textSecondary }]}>收起</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
       {loading ? <View style={styles.loading}><Text style={{ color: c.textSecondary }}>加载中...</Text></View>
