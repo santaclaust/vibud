@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, StatusBar, useColorScheme } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, StatusBar } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import ConfessionScreen from './src/screens/ConfessionScreen';
 import MessageScreen from './src/screens/MessageScreen';
@@ -9,73 +9,80 @@ import TreeHoleScreen from './src/screens/TreeHoleScreen';
 import TimeMachineScreen from './src/screens/TimeMachineScreen';
 import TabBar from './src/components/TabBar';
 import CenterMenu from './src/components/CenterMenu';
-import themeManager, { ThemeMode, lightTheme, darkTheme } from './src/services/ThemeManager';
+import { useTheme } from './src/hooks/useTheme';
 import notificationService from './src/services/NotificationService';
-import { initCloudBase, signInAnonymously, getAuthState, saveUserProfile, getUserProfile, logout, customLogin } from './src/services/CloudBaseService';
+import { initCloudBase, saveUserProfile, getUserProfile, logout } from './src/services/CloudBaseService';
+import logger from './src/services/Logger';
 
 type ScreenName = 'Home' | 'Confession' | 'Message' | 'Profile' | 'Community' | 'TreeHole' | 'TimeMachine';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<ScreenName>('Home');
   const [menuVisible, setMenuVisible] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [userId, setUserId] = useState<string>('guest');
   const [userInfo, setUserInfo] = useState<any>({ nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
   
-  const systemColorScheme = useColorScheme();
-  const isDark = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
-  const colors = isDark ? darkTheme : lightTheme;
+  const { mode: themeMode, setMode: setThemeMode, isDark, colors } = useTheme();
 
-  // 初始化
-  useEffect(() => {
-    const init = async () => {
-      // 主题
-      themeManager.init().then(setThemeMode);
-      
-      // CloudBase 匿名登录
-      const cbOk = await initCloudBase();
-      if (cbOk) {
-        try {
-          await signInAnonymously();
-          const authState = await getAuthState();
-          if (authState?.user) {
-            const uid = authState.user.uid;
-            setUserId(uid);
-            
-            // 尝试获取已有资料
-            let profile = await getUserProfile(uid);
-            if (!profile) {
-              // 首次创建用户资料
-              await saveUserProfile({
-                id: uid,
-                nickname: '游客',
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-                stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 }
-              });
-              profile = { id: uid, nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } } as any;
-            }
-            setUserInfo(profile);
-          }
-        } catch (err) {
-          console.error('[CloudBase] 匿名登录失败:', err);
-        }
-      }
-    };
-    
-    init();
-    notificationService.init();
+  // 用户初始化（获取 CloudBase 用户后创建/获取资料）
+  const initUserProfile = useCallback(async (uid: string) => {
+    let profile = await getUserProfile(uid);
+    if (!profile) {
+      await saveUserProfile({
+        id: uid,
+        nickname: '游客',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 }
+      });
+      profile = { id: uid, nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } };
+    }
+    setUserInfo(profile);
   }, []);
 
-  const handleCenterPress = () => setMenuVisible(true);
+  // 初始化 CloudBase + 获取用户
+  useEffect(() => {
+    const init = async () => {
+      const cbOk = await initCloudBase();
+      if (cbOk) {
+        const authState = await import('./src/services/CloudBaseService').then(m => m.getAuthState());
+        if (authState?.user) {
+          setUserId(authState.user.uid);
+          await initUserProfile(authState.user.uid);
+        }
+      }
+      notificationService.init();
+    };
+    init();
+  }, [initUserProfile]);
 
+  const handleCenterPress = () => setMenuVisible(true);
   const handleMenuSelect = (optionId: string) => {
-    if (optionId === 'confession') setCurrentRoute('Confession');
-    else if (optionId === 'treehole') setCurrentRoute('TreeHole');
-    else if (optionId === 'timemachine') setCurrentRoute('TimeMachine');
+    const map: Record<string, ScreenName> = { confession: 'Confession', treehole: 'TreeHole', timemachine: 'TimeMachine' };
+    if (map[optionId]) setCurrentRoute(map[optionId]);
   };
 
-  // 渲染当前页面
+  const handleLogout = useCallback(async () => {
+    logger.log('[App] onLogout 开始');
+    try {
+      await logout();
+      const authState = await import('./src/services/CloudBaseService').then(m => m.getAuthState());
+      if (authState?.user) {
+        setUserId(authState.user.uid);
+        setUserInfo({ nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
+      }
+    } catch (err) {
+      logger.error('[App] 重新登录失败:', err);
+    }
+  }, []);
+
+  const handleCustomLogin = useCallback((username: string) => {
+    logger.log('[App] onCustomLogin:', username);
+    const newUid = `user_${username}_${Date.now()}`;
+    setUserId(newUid);
+    setUserInfo({ nickname: username, stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
+  }, []);
+
   const renderScreen = () => {
     const screenProps = { 
       navigation: { navigate: (n: ScreenName) => setCurrentRoute(n) }, 
@@ -84,31 +91,8 @@ export default function App() {
       onThemeChange: setThemeMode,
       userId,
       userInfo,
-      onLogout: async () => {
-        console.log('[App] onLogout 开始');
-        // 退出后重新登录，获取新用户
-        try {
-          const result = await logout();
-          console.log('[App] logout 返回:', result);
-          const authState = await getAuthState();
-          console.log('[App] getAuthState 结果:', authState?.user?.uid);
-          if (authState?.user) {
-            const newUid = authState.user.uid;
-            console.log('[App] 切换用户从', userId, '到', newUid);
-            setUserId(newUid);
-            setUserInfo({ nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
-          }
-        } catch (err) {
-          console.error('[App] 重新登录失败:', err);
-        }
-      },
-      onCustomLogin: async (username: string) => {
-        console.log('[App] onCustomLogin:', username);
-        const newUid = `user_${username}_${Date.now()}`;
-        console.log('[App] 切换用户从', userId, '到', newUid);
-        setUserId(newUid);
-        setUserInfo({ nickname: username, stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
-      }
+      onLogout: handleLogout,
+      onCustomLogin: handleCustomLogin,
     };
     
     return (
@@ -126,7 +110,7 @@ export default function App() {
     );
   };
 
-  const showTabBar = currentRoute === 'Home' || currentRoute === 'Message' || currentRoute === 'Profile' || currentRoute === 'Community';
+  const showTabBar = ['Home', 'Message', 'Profile', 'Community'].includes(currentRoute);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -134,12 +118,7 @@ export default function App() {
       <View style={styles.content}>{renderScreen()}</View>
       {showTabBar && (
         <View style={styles.tabBarContainer}>
-          <TabBar 
-            navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} 
-            currentRoute={currentRoute} 
-            onCenterPress={handleCenterPress}
-            colors={colors}
-          />
+          <TabBar navigation={{ navigate: (n: ScreenName) => setCurrentRoute(n) }} currentRoute={currentRoute} onCenterPress={handleCenterPress} colors={colors} />
         </View>
       )}
       <CenterMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onSelect={handleMenuSelect} />

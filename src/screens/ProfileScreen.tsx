@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
-import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect } from '../services/CloudBaseService';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator, StyleSheet as RNSS } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect, getComments } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -19,12 +20,10 @@ const menuItems = [
   { id: 'about', icon: 'ℹ️', name: '关于心芽', arrow: '›' },
 ];
 
-export default function ProfileScreen({ navigation, colors, userId, userInfo, onUserCardPress }: ProfileScreenProps) {
-  const c = colors || { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#999999', border: '#F0F0F0' };
-
-  const displayName = userInfo?.nickname || (userId ? `用户${userId.slice(0, 6)}` : '新用户');
-  const displayDesc = userId ? (userInfo?.phone || '已登录') : '点击登录';
-  const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, continuousDays: 0 };
+export default function ProfileScreen({ navigation, colors: c, userId, userInfo, onUserCardPress }: ProfileScreenProps) {
+  const displayName = userInfo?.nickname || '游客';
+  const displayDesc = userId ? `ID: ${userId.slice(-8)}` : '未登录';
+  const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 };
 
   // 情绪记忆弹窗
   const [showEmotionMemory, setShowEmotionMemory] = useState(false);
@@ -37,6 +36,46 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   const [loadingFavorites, setLoadingFavorites] = useState(false);
   const [selectedFavorites, setSelectedFavorites] = useState<Set<string>>(new Set());
   const [editMode, setEditMode] = useState(false);
+
+  // 帖子详情弹窗
+  const [showPostDetail, setShowPostDetail] = useState(false);
+  const [detailPost, setDetailPost] = useState<any>(null);
+  const [detailComments, setDetailComments] = useState<any[]>([]);
+  const [loadingDetailComments, setLoadingDetailComments] = useState(false);
+
+  // 主题
+  const isDark = c.surface === '#2D2D2D';
+  const blurTint = isDark ? 'dark' : 'light';
+
+  // 打开帖子详情
+  const handlePostPress = async (post: any) => {
+    console.log('[Profile] handlePostPress post._id:', post._id);
+    setDetailPost(post);
+    setShowPostDetail(true);
+    setLoadingDetailComments(true);
+    try {
+      const comments = await getComments(post._id);
+      console.log('[Profile] getComments 返回:', comments.length, '条');
+      setDetailComments(comments);
+    } catch (err) {
+      console.error('获取评论失败:', err);
+    } finally {
+      setLoadingDetailComments(false);
+    }
+  };
+
+  const handleClosePostDetail = () => {
+    setShowPostDetail(false);
+    setDetailPost(null);
+    setDetailComments([]);
+  };
+
+  // 格式化时间
+  const formatTime = (timestamp?: number) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+  };
 
   const toggleSelectFavorite = (post: any, index: number) => {
     const key = String(post._id || post.id || `fav_${index}`);
@@ -63,7 +102,6 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
     setLoadingFavorites(true);
     try {
       await batchUncollect(ids, userId);
-      // 过滤时用相同 key 逻辑
       setFavoritePosts(prev => prev.filter((p, i) => {
         const key = String(p._id || p.id || `fav_${i}`);
         return !selectedFavorites.has(key);
@@ -116,12 +154,10 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
   };
 
   const handleUncollect = async (post: any) => {
-    if (!userId) return;
-    const docId = post._id || post.id;
-    if (!docId) return;
+    if (!userId || !post._id) return;
     try {
-      await toggleCollect(docId, userId);
-      setFavoritePosts(prev => prev.filter(p => (p._id || p.id) !== docId));
+      await toggleCollect(post._id, userId);
+      setFavoritePosts(prev => prev.filter(p => p._id !== post._id));
     } catch (err) {
       console.error('取消收藏失败:', err);
     }
@@ -182,7 +218,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                   <Text style={[styles.favTitle, { color: c.text }]}>{selectedFavorites.size}/{favoritePosts.length} 已选</Text>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <TouchableOpacity onPress={handleBatchUncollect} disabled={selectedFavorites.size === 0}>
-                      <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15 }}>取消{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}</Text>
+                      <Text style={{ color: selectedFavorites.size > 0 ? '#FF4757' : '#CCC', fontSize: 15 }}>取消收藏{selectedFavorites.size > 0 ? `(${selectedFavorites.size})` : ''}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => { setEditMode(false); setSelectedFavorites(new Set()); }}>
                       <Text style={{ color: c.textSecondary, fontSize: 15 }}>关闭</Text>
@@ -195,7 +231,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                   <View style={{ flexDirection: 'row', gap: 16 }}>
                     {favoritePosts.length > 0 && (
                       <TouchableOpacity onPress={() => setEditMode(true)}>
-                        <Text style={{ color: c.primary, fontSize: 15 }}>编辑</Text>
+                        <Text style={{ color: c.primary, fontSize: 15 }}>批量</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity onPress={handleCloseFavorites}><Text style={[styles.favClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
@@ -213,7 +249,7 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                   const key = String(post._id || post.id || `fav_${i}`);
                   const checked = selectedFavorites.has(key);
                   return (
-                    <View key={key} style={[styles.favItem, { borderBottomColor: c.border }]}>
+                    <TouchableOpacity key={key} style={[styles.favItem, { borderBottomColor: c.border }]} onPress={() => !editMode && handlePostPress(post)} activeOpacity={0.7}>
                       {editMode ? (
                         <TouchableOpacity style={styles.favCheckbox} onPress={() => toggleSelectFavorite(post, i)}>
                           <Text style={{ fontSize: 18, color: checked ? c.primary : c.textSecondary }}>{checked ? '☑' : '☐'}</Text>
@@ -224,13 +260,13 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
                         <View style={styles.favItemMeta}>
                           <Text style={[styles.favItemAuthor, { color: c.textSecondary }]}>★ {post.authorName}</Text>
                           {!editMode && (
-                            <TouchableOpacity onPress={() => { if (userId) toggleCollect(post._id, userId); setFavoritePosts(prev => prev.filter(p => p._id !== post._id)); }}>
+                            <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleUncollect(post); }}>
                               <Text style={[styles.favItemUncollect, { color: '#FF4757' }]}>取消收藏</Text>
                             </TouchableOpacity>
                           )}
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
@@ -243,38 +279,82 @@ export default function ProfileScreen({ navigation, colors, userId, userInfo, on
       <Modal visible={showEmotionMemory} transparent animationType="fade" onRequestClose={() => setShowEmotionMemory(false)}>
         <View style={styles.emotionOverlay}>
           <View style={[styles.emotionCard, { backgroundColor: c.surface }]}>
-            <View style={styles.emotionHeader}>
+            <View style={[styles.emotionHeader, { borderBottomColor: c.border }]}>
               <Text style={[styles.emotionTitle, { color: c.text }]}>心绪历程 🌿</Text>
-              <TouchableOpacity onPress={() => setShowEmotionMemory(false)}><Text style={[styles.emotionClose, { color: c.textSecondary }]}>关闭</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowEmotionMemory(false)}><Text style={{ color: c.textSecondary }}>关闭</Text></TouchableOpacity>
             </View>
             <ScrollView style={styles.emotionList}>
               {loadingLogs ? (
                 <ActivityIndicator size="small" color={c.textSecondary} style={{ marginTop: 40 }} />
               ) : emotionLogs.length === 0 ? (
                 <View style={styles.emotionEmpty}>
-                  <Text style={[styles.emotionEmptyText, { color: c.textSecondary }]}>还没有倾诉记录</Text>
-                  <Text style={[styles.emotionEmptySub, { color: c.textSecondary }]}>完成倾诉后，这里会出现你的心绪轨迹</Text>
+                  <Text style={{ color: c.textSecondary }}>还没有倾诉记录</Text>
                 </View>
               ) : (
                 emotionLogs.map((log, i) => (
                   <View key={log._id || i} style={[styles.emotionItem, { borderBottomColor: c.border }]}>
-                    <Text style={[styles.emotionDate, { color: c.textSecondary }]}>
+                    <Text style={{ color: c.textSecondary, fontSize: 13 }}>
                       {new Date(log.timestamp).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
                     </Text>
-                    <View style={styles.emotionKeywords}>
+                    <View style={[styles.emotionKeywords, { marginTop: 8 }]}>
                       {(log.keywords || []).map((kw: string, ki: number) => (
                         <View key={ki} style={[styles.emotionTag, { backgroundColor: c.background }]}>
-                          <Text style={[styles.emotionTagText, { color: c.text }]}>{kw}</Text>
+                          <Text style={{ color: c.text, fontSize: 12 }}>{kw}</Text>
                         </View>
                       ))}
                     </View>
-                    {log.textExcerpt && (
-                      <Text style={[styles.emotionExcerpt, { color: c.textSecondary }]} numberOfLines={1}>{log.textExcerpt}</Text>
-                    )}
                   </View>
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 帖子详情弹窗 - 虚化背景 */}
+      <Modal visible={showPostDetail} transparent animationType="fade" onRequestClose={handleClosePostDetail}>
+        <View style={styles.postDetailOverlay}>
+          <TouchableOpacity style={RNSS.absoluteFill} activeOpacity={1} onPress={handleClosePostDetail}>
+            <BlurView intensity={80} tint={blurTint} style={RNSS.absoluteFill} />
+          </TouchableOpacity>
+          <View style={styles.postDetailCardWrap}>
+            <View style={[styles.commentCard, { backgroundColor: c.surface }]}>
+              <View style={[styles.commentCardHeader, { borderBottomColor: c.border }]}>
+                <View style={{ width: 40 }} />
+                <Text style={[styles.commentCardTitle, { color: c.text }]}>帖子详情</Text>
+                <TouchableOpacity onPress={handleClosePostDetail}>
+                  <Text style={{ color: c.textSecondary }}>关闭</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.commentScroll} contentContainerStyle={{ paddingBottom: 16 }}>
+                <View style={[styles.commentPostHeader, { padding: 16 }]}>
+                  <View style={styles.avatarWrap}><Text style={styles.avatarText}>🌱</Text></View>
+                  <View style={styles.authorInfo}>
+                    <Text style={[styles.authorName, { color: c.text }]}>{detailPost?.authorName || '匿名用户'}</Text>
+                    <Text style={[styles.postMeta, { color: c.textSecondary }]}>{formatTime(detailPost?.createTime)}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.commentPostText, { color: c.text, paddingHorizontal: 16 }]}>{detailPost?.text || ''}</Text>
+                <View style={[styles.commentDivider, { borderTopColor: c.border, marginTop: 16 }]}>
+                  <Text style={[styles.commentDividerText, { color: c.textSecondary }]}>全部评论 ({detailComments.length})</Text>
+                </View>
+                {loadingDetailComments ? (
+                  <ActivityIndicator size="small" color={c.textSecondary} style={{ marginTop: 20 }} />
+                ) : detailComments.length === 0 ? (
+                  <View style={styles.commentEmpty}><Text style={{ color: c.textSecondary }}>暂无评论</Text></View>
+                ) : (
+                  detailComments.map((item: any, idx: number) => (
+                    <View key={item._id || idx} style={[styles.commentItem, { borderBottomColor: c.border }]}>
+                      <View style={styles.commentAvatar}><Text style={{ fontSize: 13 }}>🌱</Text></View>
+                      <View style={styles.commentContent}>
+                        <Text style={[styles.commentAuthorName, { color: c.text }]}>{item.authorName}</Text>
+                        <Text style={[styles.commentText, { color: c.textSecondary }]}>{item.text}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -311,7 +391,7 @@ const styles = StyleSheet.create({
   favClose: { fontSize: 15 },
   favList: { maxHeight: 400 },
   favEmpty: { alignItems: 'center', paddingVertical: 40 },
-  favItem: { padding: 16, borderBottomWidth: 0.5 },
+  favItem: { padding: 16, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
   favItemText: { fontSize: 14, lineHeight: 20 },
   favItemMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   favItemAuthor: { fontSize: 12 },
@@ -320,18 +400,34 @@ const styles = StyleSheet.create({
   favItemContent: { flex: 1 },
   // 情绪记忆弹窗
   emotionOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, marginHorizontal: 16, width: '90%', maxHeight: '70%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
-  emotionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  emotionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 0, marginHorizontal: 16, width: '90%', maxHeight: '70%', overflow: 'hidden' },
+  emotionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   emotionTitle: { fontSize: 18, fontWeight: '600' },
-  emotionClose: { fontSize: 15 },
   emotionList: { maxHeight: 400 },
   emotionEmpty: { alignItems: 'center', paddingVertical: 40 },
-  emotionEmptyText: { fontSize: 15 },
-  emotionEmptySub: { fontSize: 13, marginTop: 8, textAlign: 'center' },
-  emotionItem: { paddingVertical: 14, borderBottomWidth: 1 },
-  emotionDate: { fontSize: 13, marginBottom: 8 },
-  emotionKeywords: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  emotionTag: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  emotionTagText: { fontSize: 13, fontWeight: '500' },
-  emotionExcerpt: { fontSize: 13, marginTop: 4 },
+  emotionItem: { padding: 16, borderBottomWidth: 0.5 },
+  emotionKeywords: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  emotionTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  // 帖子详情弹窗
+  postDetailOverlay: { flex: 1 },
+  postDetailCardWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  commentCard: { borderRadius: 20, padding: 0, marginHorizontal: 16, width: '90%', maxHeight: '80%', overflow: 'hidden' },
+  commentCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  commentCardTitle: { fontSize: 17, fontWeight: '600' },
+  commentScroll: { maxHeight: 500 },
+  commentPostHeader: { flexDirection: 'row', alignItems: 'center' },
+  avatarWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontSize: 20 },
+  authorInfo: { marginLeft: 10, flex: 1 },
+  authorName: { fontSize: 15, fontWeight: '600' },
+  postMeta: { fontSize: 12, marginTop: 2 },
+  commentPostText: { fontSize: 16, lineHeight: 24, paddingVertical: 12 },
+  commentDivider: { borderTopWidth: 0.5, paddingVertical: 12, paddingHorizontal: 16 },
+  commentDividerText: { fontSize: 13 },
+  commentEmpty: { alignItems: 'center', paddingVertical: 30 },
+  commentItem: { flexDirection: 'row', padding: 16, paddingTop: 12, borderBottomWidth: 0.5 },
+  commentAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  commentContent: { flex: 1 },
+  commentAuthorName: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  commentText: { fontSize: 14, lineHeight: 20 },
 });

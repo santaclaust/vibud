@@ -18,23 +18,15 @@ export function setImageSource(source: ImageSource): void {
 // 循环切换图片源
 export function toggleImageSource(): ImageSource {
   switch (currentSource) {
-    case 'pexels':
-      currentSource = 'pixabay';
-      break;
-    case 'pixabay':
-      currentSource = 'lorempicsum';
-      break;
-    case 'lorempicsum':
-      currentSource = 'pexels';
-      break;
+    case 'pexels': currentSource = 'pixabay'; break;
+    case 'pixabay': currentSource = 'lorempicsum'; break;
+    case 'lorempicsum': currentSource = 'pexels'; break;
   }
   return currentSource;
 }
 
-// 直接设置图片源
-export function cycleToNextSource(): ImageSource {
-  return toggleImageSource();
-}
+// 直接设置图片源（保留兼容旧调用）
+export const cycleToNextSource = toggleImageSource;
 
 // 统一搜索接口
 export async function searchImage(quoteText: string, category: string = 'all'): Promise<string | null> {

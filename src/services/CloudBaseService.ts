@@ -461,24 +461,38 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
     if (!initialized) await initCloudBase();
     let q = app!.database().collection('community_posts');
+    // 按分类筛选
+    if (category) {
+      q = q.where({ category });
+    }
     const r = await q.limit(limitCount).get();
-    const docs = r.data || [];
-    const data = docs.map((doc: any) => {
+    const docs = r.data || []; // CloudBase 返回数组
+    
+    // 批量查询每个帖子的评论数
+    const postsWithCounts = await Promise.all(docs.map(async (doc: any) => {
       const inner = doc.data || {};
-      const likeCount = doc.likeCount ?? inner.likeCount ?? 0;
-      const commentCount = doc.commentCount ?? inner.commentCount ?? 0;
-      const shareCount = doc.shareCount ?? inner.shareCount ?? 0;
       const _id = doc._id || '';
+      
+      // 查询评论数量
+      const commentR = await app!.database().collection('comments').where({ postId: _id }).get();
+      const realCommentCount = (commentR.data || []).length;
+      
+      const likeCount = doc.likeCount ?? inner.likeCount ?? 0;
+      const shareCount = doc.shareCount ?? inner.shareCount ?? 0;
+      
+      console.log('[DBG] post _id:', _id, 'realCommentCount:', realCommentCount);
+      
       return {
-        ...doc,
         ...inner,
+        ...doc,
         _id,
         likeCount,
-        commentCount,
+        commentCount: realCommentCount, // 使用真实的评论数
         shareCount,
       };
-    });
-    return data.sort((a: any, b: any) => (b.createTime || 0) - (a.createTime || 0));
+    }));
+    
+    return postsWithCounts.sort((a: any, b: any) => (b.createTime || 0) - (a.createTime || 0));
   } catch (err) {
     console.error('[CloudBase] getCommunityPosts 失败:', err);
     return [];
@@ -620,11 +634,15 @@ export const publishComment = async (comment: {
   });
   // 更新帖子评论数（更新顶层 commentCount）
   const postR = await app!.database().collection('community_posts').doc(String(comment.postId)).get();
-  if (postR.data) {
-    const post: any = postR.data;
+  const postList = postR.data || [];
+  const post = postList[0]; // CloudBase 返回数组
+  console.log('[publishComment] postR:', JSON.stringify(postR));
+  if (post) {
     const inner = post.data || {};
     const currentCount = post.commentCount ?? inner.commentCount ?? 0;
+    console.log('[publishComment] post._id:', post._id, 'currentCount:', currentCount);
     await app!.database().collection('community_posts').doc(comment.postId).update({ commentCount: currentCount + 1 });
+    console.log('[publishComment] updated commentCount to:', currentCount + 1);
   }
   return r;
 };

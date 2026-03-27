@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Refre
 import { BlurView } from 'expo-blur';
 import { getCommunityPosts, publishPost, toggleWarmth, toggleCollect, getUserPostStates, publishComment, getComments } from '../services/CloudBaseService';
 
-const CATEGORIES = ['全部', '情绪', '心理', '家庭', '爱情', '职场', '学业', '生活', '成长', '互助', '吐槽', '其他'];
+const CATEGORIES = ['情绪', '生活', '心理', '成长', '家庭', '互助', '爱情', '吐槽', '职场', '其他', '学业', '全部'];
 const CATEGORY_COLORS: Record<string, string> = {
   '全部': '#666', '情绪': '#E57373', '心理': '#9575CD', '家庭': '#FF8A65',
   '爱情': '#F06292', '职场': '#5B8DEF', '学业': '#4FC3F7', '生活': '#81C784',
@@ -24,6 +24,7 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
 
   const [posts, setPosts] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState('全部');
+  const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
@@ -35,11 +36,20 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
   const [comments, setComments] = useState<any[]>([]);
 
   const fetchPosts = useCallback(async () => {
-    if (!uid) return; // userId 未设置前不查，避免用 guest uid 查不到真实用户数据
+    if (!uid) return;
     setLoading(true);
     try {
       const category = activeCategory === '全部' ? undefined : activeCategory;
-      const data = await getCommunityPosts(category, 100);
+      let data = await getCommunityPosts(category, 100);
+      // 搜索过滤
+      if (searchText.trim()) {
+        const kw = searchText.trim().toLowerCase();
+        data = data.filter((p: any) => 
+          (p.text || '').toLowerCase().includes(kw) ||
+          (p.authorName || '').toLowerCase().includes(kw) ||
+          (p.category || '').toLowerCase().includes(kw)
+        );
+      }
       const postIds = data.map((p: any) => p._id || p.id);
       const { likedSet, collectedSet } = await getUserPostStates(postIds, uid);
       const merged = data.map((p: any) => {
@@ -50,7 +60,12 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
       setPosts(merged);
     } catch (err) { console.error('获取帖子失败:', err); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [activeCategory, uid]);
+  }, [activeCategory, searchText, uid]);
+
+  // 监听分类和搜索变化，重新加载帖子
+  useEffect(() => {
+    fetchPosts();
+  }, [activeCategory, searchText]);
 
   // userId 从空变真实值时（匿名登录完成后）重新拉取帖子
   const prevUserId = useRef(userId);
@@ -60,8 +75,6 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
       fetchPosts();
     }
   }, [userId]);
-
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
   const handleRefresh = () => { setRefreshing(true); fetchPosts(); };
 
@@ -143,6 +156,10 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
     try {
       await publishComment({ postId: commentPost._id, authorId: uid, authorName: displayName, text, userId: uid });
       setComments((prev: any[]) => [newComment, ...prev]);
+      // 刷新帖子列表（更新评论数）
+      fetchPosts();
+      // 关闭评论弹窗
+      setCommentPost(null);
     } catch (err) { Alert.alert('评论失败'); console.error('评论失败:', err); }
   };
 
@@ -204,14 +221,24 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Text style={[styles.headerTitle, { color: c.text }]}>社群</Text>
       </View>
+      {/* 搜索栏 */}
+      <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.surface }}>
+        <TextInput
+          style={[styles.searchInput, { backgroundColor: c.background, color: c.text }]}
+          placeholder="搜索帖子内容..."
+          placeholderTextColor={c.textSecondary}
+          value={searchText}
+          onChangeText={setSearchText}
+        />
+      </View>
       <View style={[styles.categoryWrap, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8 }}>
           {CATEGORIES.map(cat => (
             <TouchableOpacity key={cat} style={[styles.catTag, { backgroundColor: activeCategory === cat ? CATEGORY_COLORS[cat] : c.surface, borderColor: CATEGORY_COLORS[cat] }]} onPress={() => setActiveCategory(cat)}>
               <Text style={[styles.catTagText, { color: activeCategory === cat ? '#FFF' : CATEGORY_COLORS[cat] }]}>{cat}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </View>
       </View>
       {loading ? <View style={styles.loading}><Text style={{ color: c.textSecondary }}>加载中...</Text></View>
       : posts.length === 0 ? (
@@ -276,11 +303,11 @@ export default function CommunityScreen({ navigation, colors, userId, themeMode 
           <View style={[styles.commentCard, { backgroundColor: c.surface }]}>
             {/* 卡片头部 */}
             <View style={[styles.commentCardHeader, { borderBottomColor: c.border }]}>
+              <View style={{ width: 40 }} />
+              <Text style={[styles.commentCardTitle, { color: c.text }]}>评论</Text>
               <TouchableOpacity onPress={() => setCommentPost(null)}>
                 <Text style={{ color: c.textSecondary, fontSize: 15 }}>关闭</Text>
               </TouchableOpacity>
-              <Text style={[styles.commentCardTitle, { color: c.text }]}>评论</Text>
-              <View style={{ width: 40 }} />
             </View>
             {/* 帖子内容 */}
             <ScrollView style={styles.commentScroll} contentContainerStyle={{ paddingBottom: 16 }}>
@@ -331,7 +358,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { height: 48, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 0.5 },
   headerTitle: { fontSize: 17, fontWeight: '600' },
-  categoryWrap: { paddingVertical: 10, borderBottomWidth: 0.5 },
+  categoryWrap: { paddingVertical: 8, borderBottomWidth: 0.5, minHeight: 44 },
+  searchInput: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, fontSize: 14 },
   catTag: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 14, borderWidth: 1, marginRight: 8 },
   catTagText: { fontSize: 13, fontWeight: '500' },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },

@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Dimensions, ScrollView, Image, ActivityIndicator, useColorScheme, Alert, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Dimensions, ScrollView, Image, ActivityIndicator, Alert, Modal, Pressable } from 'react-native';
 import { getTodayQuote, getQuotesByCategory, Quote } from '../data/quotes';
 import { searchImage, getCurrentImageSource, toggleImageSource, ImageSource, preloadImages, getNextImage } from '../services/ImageSourceManager';
-import themeManager, { ThemeMode, lightTheme, darkTheme } from '../services/ThemeManager';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeMode } from '../services/ThemeManager';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+import logger from '../services/Logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -34,22 +36,19 @@ const getThemeIcon = (mode: ThemeMode): string => {
 };
 
 export default function HomeScreen({ navigation, menuVisible, colors: propsColors, themeMode: propsThemeMode, onThemeChange }: any) {
+  // 使用 Hook 管理主题
+  const { mode, cycle } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentQuote, setCurrentQuote] = useState<Quote>(getTodayQuote());
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageSource, setImageSource] = useState<ImageSource>('pexels');
   const [showImageMenu, setShowImageMenu] = useState(false);
-  
-  // 优先使用props的themeMode，否则使用本地状态
-  const [localThemeMode, setLocalThemeMode] = useState<ThemeMode>('light');
-  const currentThemeMode = propsThemeMode || localThemeMode;
-  const isDark = currentThemeMode === 'dark';
   const [isLongPressing, setIsLongPressing] = useState(false);
   
-  // 优先使用props传递的colors，否则自己计算
-  const defaultColors = { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF' };
-  const colors = propsColors || defaultColors;
+  // 优先使用props传递的colors，否则使用Hook的colors
+  const colors = propsColors || { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF' };
+  const isDark = mode === 'dark';
   
   // 手势相关
   const lastY = useRef(0);
@@ -57,13 +56,6 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
   const isSwiping = useRef(false);
   
   const tagSize = useMemo(() => calculateTagSize(), []);
-  
-  // 初始化
-  useEffect(() => {
-    if (!propsThemeMode) {
-      themeManager.init().then(setLocalThemeMode);
-    }
-  }, [propsThemeMode]);
 
   // 加载图片（优先用缓存）
   const loadImage = useCallback(async (quote: Quote, category: string) => {
@@ -275,8 +267,7 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
 
   // 切换主题
   const handleToggleTheme = async () => {
-    const newMode = await themeManager.cycle();
-    setLocalThemeMode(newMode);
+    const newMode = await cycle();
     if (onThemeChange) {
       onThemeChange(newMode);
     }
@@ -329,7 +320,7 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
         </View>
         
         <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.card }]} onPress={handleToggleTheme}>
-          <Text style={styles.themeButtonText}>{getThemeIcon(currentThemeMode)}</Text>
+          <Text style={styles.themeButtonText}>{getThemeIcon(mode)}</Text>
         </TouchableOpacity>
       </View>
 
