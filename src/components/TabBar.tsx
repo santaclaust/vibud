@@ -13,7 +13,7 @@ const tabs: TabItem[] = [
   { name: 'Community', icon: '🌲', label: '社群' },
   { name: 'Confession', icon: '💬', label: '倾诉', isCenter: true },
   { name: 'Message', icon: '💌', label: '消息' },
-  { name: 'Profile', icon: '👤', label: '我的' },
+  { name: 'Profile', icon: '💙', label: '我的' },
 ];
 
 interface TabBarProps {
