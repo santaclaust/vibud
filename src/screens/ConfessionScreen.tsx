@@ -102,16 +102,18 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         const response = await aiService.getResponse(
           userMessage.content,
           selectedMode as 'heal' | 'consult',
-          emotionHistory
+          emotionHistory,
+          userId,
+          messages  // 传入对话历史，用于生成会话摘要
         );
         const assistantMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: response.text, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMessage]);
         scrollToBottom();
         
-        // AI回复后，启动60秒自动保存计时器
+        // AI回复后，启动自动保存计时器（测试用10秒，正式60秒）
         autoSaveTimer.current = setTimeout(() => {
           triggerEmotionSave();
-        }, 60000);
+        }, 10000); // TODO: 上线前改回 60000
         
       } catch (error) { console.error('AI回复失败:', error); } 
       finally { setIsLoading(false); }
@@ -124,9 +126,9 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
 
   const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); setShowCompletionHint(false); };
 
-  // 自动保存情绪关键词（静默）
+  // 自动保存情绪关键词（静默，不显示给用户）
   const triggerEmotionSave = async () => {
-    if (messages.length === 0 || showCompletionHint) return;
+    if (messages.length === 0) return;
     const uid = userId || 'guest';
     const fullText = messages.map(m => m.content).join('。');
     if (fullText.length < 5) return;
@@ -139,9 +141,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         textExcerpt: fullText.slice(0, 50),
         timestamp: Date.now(),
       });
-      notifyEmotionSaved(keywords, uid);
-      setEmotionKeywords(keywords);
-      setShowCompletionHint(true);
+      console.log('[Confession] 情绪日志已静默保存');
     } catch (err) {
       console.error('保存情绪日志失败:', err);
     }
@@ -157,8 +157,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     }
   };
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => (
-    <View style={[s.messageContainer, item.role === 'user' ? s.userMessageContainer : s.assistantMessageContainer]}>
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => (
+    <View key={item.id || index} style={[s.messageContainer, item.role === 'user' ? s.userMessageContainer : s.assistantMessageContainer]}>
       <View style={[s.messageBubble, item.role === 'user' ? s.userBubble : s.assistantBubble]}>
         <Text style={[s.messageText, item.role === 'user' ? s.userMessageText : s.assistantMessageText]}>{item.content}</Text>
       </View>
@@ -194,16 +194,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
               <Text style={s.emptyTitle}>{selectedMode === 'heal' ? '我在倾听' : selectedMode === 'treehole' ? '树洞听你说' : '让我们聊聊'}</Text>
               <Text style={s.emptyDesc}>把想说的话说给{selectedMode === 'treehole' ? '树洞' : '我'}听</Text>
             </View>
-          ) : (messages.map((msg) => renderMessage({ item: msg })))}
+          ) : (messages.map((msg) => renderMessage({ item: msg, index: messages.indexOf(msg) })))}
           {isLoading && <View style={[s.messageContainer, s.assistantMessageContainer]}><View style={[s.messageBubble, s.assistantBubble]}><ActivityIndicator size="small" color={colors.primary} /></View></View>}
-          {showCompletionHint && (
-            <View style={s.completionHint}>
-              <Text style={s.completionHintText}>倾诉已完成 🌱</Text>
-              {emotionKeywords.length > 0 && (
-                <Text style={s.completionKeywords}>{emotionKeywords.join(' · ')}</Text>
-              )}
-            </View>
-          )}
         </ScrollView>
         <View style={s.inputArea}>
           <ScrollView keyboardShouldPersistTaps="handled"><TextInput style={s.textInput} placeholder="写下你的心情..." placeholderTextColor="#999" multiline value={text} onChangeText={setText} textAlignVertical="top" editable={!isLoading} /></ScrollView>

@@ -215,6 +215,19 @@ export const deleteDocument = async (collName: string, docId: string) => {
   return await app!.database().collection(collName).doc(docId).remove();
 };
 
+// ========== 云函数 ==========
+
+/**
+ * 调用云函数
+ */
+export const callFunction = async (name: string, data: object): Promise<any> => {
+  if (!initialized) await initCloudBase();
+  return await app!.callFunction({
+    name,
+    data,
+  });
+};
+
 // ========== 数据模型 ==========
 
 export interface UserProfile {
@@ -330,6 +343,24 @@ export const saveUserProfile = async (profile: UserProfile) => {
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
   const res = await queryDocuments('users', { id: userId }, undefined, 1);
   return res.data?.[0] || null;
+};
+
+/** 保存推送 Token */
+export const savePushToken = async (userId: string, token: string) => {
+  const existing = await queryDocuments('push_tokens', { userId }, undefined, 1);
+  if (existing.data?.length > 0) {
+    // 已存在则更新
+    return await updateDocument('push_tokens', existing.data[0]._id, { token, updatedAt: Date.now() });
+  } else {
+    // 新增
+    return await addDocument('push_tokens', { userId, token, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+};
+
+/** 获取用户的推送 Token */
+export const getPushToken = async (userId: string): Promise<string | null> => {
+  const res = await queryDocuments('push_tokens', { userId }, undefined, 1);
+  return res.data?.[0]?.token || null;
 };
 
 /** 保存倾诉记录 */

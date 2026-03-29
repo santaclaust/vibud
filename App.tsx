@@ -51,7 +51,21 @@ export default function App() {
           await initUserProfile(authState.user.uid);
         }
       }
-      notificationService.init();
+      await notificationService.init();
+      
+      // 监听通知点击
+      notificationService.addNotificationResponseReceivedListener((response) => {
+        const { type, data } = notificationService.parseNotification(response.notification);
+        logger.log('[App] 通知点击:', type, data);
+        // 根据通知类型跳转
+        if (type === 'ai_reply' || type === 'treehole_liked') {
+          setCurrentRoute('Message');
+        } else if (type === 'timemachine_reminder') {
+          setCurrentRoute('TimeMachine');
+        } else if (type === 'daily_checkin') {
+          setCurrentRoute('Home');
+        }
+      });
     };
     init();
   }, [initUserProfile]);

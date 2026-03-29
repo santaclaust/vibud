@@ -476,13 +476,13 @@ const styles = StyleSheet.create({
     marginBottom: 60, // 为 Tab Bar 留空间，衔接
     flex: 1,
     minHeight: 200,
-    borderRadius: 20,
+    borderRadius: 15,
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backgroundImage: { width: '100%', height: '100%', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  backgroundImage: { width: '100%', height: '100%', borderTopLeftRadius: 15, borderTopRightRadius: 15, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   loadingText: { marginTop: 12, fontSize: 14 },
   sourceTag: {
     position: 'absolute',

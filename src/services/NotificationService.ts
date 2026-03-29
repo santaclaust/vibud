@@ -1,5 +1,8 @@
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { savePushToken, getAuthState } from './CloudBaseService';
+import logger from './Logger';
 
 // 配置通知处理
 Notifications.setNotificationHandler({
@@ -22,6 +25,7 @@ export type NotificationType =
 // 通知服务
 class NotificationService {
   private initialized = false;
+  private pushToken: string | null = null;
 
   // 初始化
   async init(): Promise<boolean> {
@@ -57,12 +61,82 @@ class NotificationService {
         });
       }
 
+      // 获取并保存 Push Token（仅真机，非 web）
+      if (Device.isDevice && Platform.OS !== 'web') {
+        await this.registerForPushNotificationsAsync();
+      } else if (Platform.OS === 'web') {
+        logger.log('[Notification] Web 环境跳过 Push Token 获取');
+      }
+
       this.initialized = true;
       return true;
     } catch (error) {
       console.error('通知初始化失败:', error);
       return false;
     }
+  }
+
+  // 注册远程推送并获取 Token
+  async registerForPushNotificationsAsync(): Promise<string | null> {
+    // Web 环境不支持
+    if (Platform.OS === 'web') {
+      logger.log('[Notification] Web 环境不支持推送');
+      return null;
+    }
+
+    if (!Device.isDevice) {
+      logger.log('[Notification] 模拟机不支持推送');
+      return null;
+    }
+
+    try {
+      const { data: token } = await Notifications.getExpoPushTokenAsync({
+        projectId: 'c8c0a7k9-l3e5-d4e6-f8a9-b0c1d2e3f4a5', // TODO: 替换为实际的 Expo 项目 ID
+      });
+      
+      if (token) {
+        this.pushToken = token;
+        logger.log('[Notification] 获取到 Push Token:', token.slice(0, 20) + '...');
+        
+        // 保存到 CloudBase
+        try {
+          const authState = await getAuthState();
+          if (authState?.user?.uid) {
+            await savePushToken(authState.user.uid, token);
+            logger.log('[Notification] Push Token 已保存到 CloudBase');
+          }
+        } catch (err) {
+          logger.error('[Notification] 保存 Push Token 失败:', err);
+        }
+        
+        return token;
+      }
+    } catch (error) {
+      logger.error('[Notification] 获取 Push Token 失败:', error);
+    }
+    return null;
+  }
+
+  // 添加通知接收监听
+  addNotificationReceivedListener(callback: (notification: Notifications.Notification) => void): Notifications.Subscription {
+    return Notifications.addNotificationReceivedListener(callback);
+  }
+
+  // 添加通知点击监听
+  addNotificationResponseReceivedListener(callback: (response: Notifications.NotificationResponse) => void): Notifications.Subscription {
+    return Notifications.addNotificationResponseReceivedListener(callback);
+  }
+
+  // 解析远程通知数据
+  parseNotification(notification: Notifications.Notification): {
+    type?: string;
+    data?: any;
+  } {
+    const data = notification.request.content.data || {};
+    return {
+      type: data.type,
+      data,
+    };
   }
 
   // 发送AI回复通知
