@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
-import emotionSupportService from './EmotionSupportService';
-import { UserContext, UserGroup, EmotionIntensity, ConversationStage } from './types';
+import emotionSupportService from '../services/EmotionSupport/EmotionSupportService';
+import { UserContext, UserGroup, EmotionIntensity, ConversationStage } from '../services/EmotionSupport/types';
 
 /**
  * AI情绪疏导Hook

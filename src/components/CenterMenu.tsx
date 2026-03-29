@@ -105,7 +105,7 @@ export default function CenterMenu({ visible, onClose, onSelect }: { visible: bo
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       {/* 毛玻璃背景层 - 不包含顶部44px和底部Tab Bar */}
-      <View style={styles.blurContainer} pointerEvents="none">
+      <View style={styles.blurContainer}>
         <View style={[styles.blurWrapper, { top: BLUR_TOP, height: BLUR_HEIGHT }]}>
           <BlurView
             style={styles.blurView}

@@ -5,7 +5,7 @@ import { storageService } from '../services/StorageService';
 import { saveEmotionLog, extractEmotionKeywords, getRecentEmotionLogs } from '../services/CloudBaseService';
 
 interface ModeOption { id: string; name: string; icon: string; description: string; }
-interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; timestamp: number; }
+interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; timestamp: number; displayText?: string; isTyping?: boolean; }
 
 const modeOptions: ModeOption[] = [
   { id: 'heal', name: '治愈模式', icon: '💚', description: 'AI陪伴，温暖倾听' },
@@ -102,6 +102,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     if (selectedMode === 'heal' || selectedMode === 'consult') {
       setIsLoading(true);
       setIsCrisis(false);
+      
       try {
         const uid = userId || 'guest';
         const result = await unifiedEmotionService.processMessage(
@@ -110,15 +111,75 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
           selectedMode as 'heal' | 'consult'
         );
 
-        // 添加 AI 回复
-        const assistantMessage: ChatMessage = { 
-          id: (Date.now() + 1).toString(), 
+        // 添加空的 AI 消息占位（用于打字效果）
+        const tempId = (Date.now() + 1).toString();
+        setMessages(prev => [...prev, { 
+          id: tempId, 
           role: 'assistant', 
           content: result.response, 
+          displayText: '',
+          isTyping: true,
           timestamp: Date.now() 
-        };
-        setMessages(prev => [...prev, assistantMessage]);
+        }]);
         scrollToBottom();
+
+        // 打字效果（词组模式，更自然流畅）
+        const fullText = result.response;
+        
+        // 智能分词：将文本按语义停顿分割成词组
+        const segmentText = (text: string): string[] => {
+          const segments: string[] = [];
+          let current = '';
+          const punctuation = /[，。、！？；：""''（）]/;
+          
+          for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            current += char;
+            
+            // 遇到标点立即截断
+            if (punctuation.test(char)) {
+              segments.push(current);
+              current = '';
+            }
+            // 遇到连接词或助词，作为自然停顿点
+            else if (['但', '是', '不', '过', '而', '且', '因', '为', '所', '以', '如', '果'].includes(char) && current.length >= 4) {
+              if (i < text.length - 1 && !punctuation.test(text[i + 1])) {
+                segments.push(current);
+                current = '';
+              }
+            }
+          }
+          if (current) segments.push(current);
+          return segments.filter(s => s.length > 0);
+        };
+        
+        const segments = segmentText(fullText);
+        let displayedText = '';
+        
+        // 开头轻微延迟
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        for (const segment of segments) {
+          displayedText += segment;
+          setMessages(prev => prev.map(m => 
+            m.id === tempId ? { ...m, displayText: displayedText } : m
+          ));
+          scrollToBottom();
+          
+          // 标点后稍长停顿
+          if (/[，。！？]/.test(segment.slice(-1))) {
+            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 100));
+          }
+          // 普通词组，短暂停顿
+          else {
+            await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 60));
+          }
+        }
+        
+        // 打字完成
+        setMessages(prev => prev.map(m => 
+          m.id === tempId ? { ...m, displayText: fullText, isTyping: false } : m
+        ));
 
         // 更新危机状态
         setIsCrisis(result.isCrisis);
@@ -132,10 +193,10 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
           }
         }
 
-        // AI回复后，启动自动保存计时器（测试用10秒，正式60秒）
+        // AI回复后，启动自动保存计时器（1分钟间隔）
         autoSaveTimer.current = setTimeout(() => {
           triggerEmotionSave();
-        }, 10000); // TODO: 上线前改回 60000
+        }, 60000);
         
       } catch (error) { 
         console.error('AI回复失败:', error); 
@@ -186,6 +247,9 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     const isCrisisMsg = !isUser && messages.filter(m => m.role === 'user').length > 0 && 
                         messages[messages.indexOf(item) - 1]?.content.includes('心理援助热线');
     
+    // 打字效果：优先显示 displayText，否则显示 content
+    const displayContent = item.displayText ?? item.content;
+    
     return (
       <View key={item.id || index} style={[s.messageContainer, isUser ? s.userMessageContainer : s.assistantMessageContainer]}>
         <View style={[
@@ -193,7 +257,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
           isUser ? s.userBubble : (isCrisisMsg ? s.crisisBubble : s.assistantBubble)
         ]}>
           <Text style={[s.messageText, isUser ? s.userMessageText : (isCrisisMsg ? s.crisisMessageText : s.assistantMessageText)]}>
-            {item.content}
+            {displayContent}
           </Text>
         </View>
       </View>
@@ -204,7 +268,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
   const getModeHint = () => {
     if (isCrisis) return '危机干预模式已启动';
     const profile = userId ? unifiedEmotionService.getProfile(userId) : null;
-    if (profile?.needsMoreInfo) {
+    if (profile && profile.rounds > 1) {
       const stage = profile.conversationStage || 'INITIAL';
       const hints: Record<string, string> = {
         INITIAL: '正在了解你的情况...',
