@@ -91,7 +91,7 @@ class NotificationService {
 
     try {
       const { data: token } = await Notifications.getExpoPushTokenAsync({
-        projectId: 'c8c0a7k9-l3e5-d4e6-f8a9-b0c1d2e3f4a5', // TODO: 替换为实际的 Expo 项目 ID
+        projectId: 'santaclaust/vibud',
       });
       
       if (token) {

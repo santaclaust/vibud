@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { aiService } from '../services/AIService';
+import { unifiedEmotionService } from '../services/UnifiedEmotionService';
 import { storageService } from '../services/StorageService';
 import { saveEmotionLog, extractEmotionKeywords, getRecentEmotionLogs } from '../services/CloudBaseService';
-import { notifyEmotionSaved } from '../services/CloudNotificationService';
 
 interface ModeOption { id: string; name: string; icon: string; description: string; }
 interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; timestamp: number; }
@@ -17,7 +16,7 @@ const modeOptions: ModeOption[] = [
 ];
 
 export default function ConfessionScreen({ navigation, colors: propsColors, goBack, userId }: any) {
-  const defaultColors = { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF' };
+  const defaultColors = { background: '#F9F9F9', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E0E0E0', primary: '#4A90E2', card: '#FFFFFF', danger: '#E53935' };
   const colors = propsColors || defaultColors;
 
   const s = {
@@ -47,9 +46,11 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     messageBubble: { maxWidth: '80%' as const, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16 },
     userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
     assistantBubble: { backgroundColor: colors.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
+    crisisBubble: { backgroundColor: colors.danger || '#E53935', borderBottomLeftRadius: 4 },
     messageText: { fontSize: 15, lineHeight: 22 },
     userMessageText: { color: '#FFF' },
     assistantMessageText: { color: colors.text },
+    crisisMessageText: { color: '#FFF', fontWeight: '500' as const },
     inputArea: { backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
     textInput: { marginHorizontal: 20, marginVertical: 12, padding: 12, backgroundColor: colors.background, borderRadius: 12, fontSize: 15, lineHeight: 22, color: colors.text, minHeight: 44 },
     sendButton: { flex: 1, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center' as const, alignItems: 'center' as const },
@@ -58,6 +59,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     completionHint: { alignItems: 'center' as const, marginTop: 20, paddingVertical: 16, paddingHorizontal: 20, marginHorizontal: 20, backgroundColor: colors.background, borderRadius: 16 },
     completionHintText: { fontSize: 15, color: colors.textSecondary, marginBottom: 6 },
     completionKeywords: { fontSize: 13, color: colors.primary, fontWeight: '500' as const },
+    guidanceIndicator: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
   };
 
   const [text, setText] = useState('');
@@ -67,6 +69,7 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
   const [isLoading, setIsLoading] = useState(false);
   const [showCompletionHint, setShowCompletionHint] = useState(false);
   const [emotionKeywords, setEmotionKeywords] = useState<string[]>([]);
+  const [isCrisis, setIsCrisis] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,30 +95,51 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     setShowCompletionHint(false);
     setText('');
     scrollToBottom();
+    
     // 取消之前的自动保存计时器
     if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+
     if (selectedMode === 'heal' || selectedMode === 'consult') {
       setIsLoading(true);
+      setIsCrisis(false);
       try {
-        // 获取近7天情绪历史作为AI上下文
-        const emotionHistory = await getEmotionContext();
-        const response = await aiService.getResponse(
+        const uid = userId || 'guest';
+        const result = await unifiedEmotionService.processMessage(
           userMessage.content,
-          selectedMode as 'heal' | 'consult',
-          emotionHistory,
-          userId,
-          messages  // 传入对话历史，用于生成会话摘要
+          uid,
+          selectedMode as 'heal' | 'consult'
         );
-        const assistantMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: response.text, timestamp: Date.now() };
+
+        // 添加 AI 回复
+        const assistantMessage: ChatMessage = { 
+          id: (Date.now() + 1).toString(), 
+          role: 'assistant', 
+          content: result.response, 
+          timestamp: Date.now() 
+        };
         setMessages(prev => [...prev, assistantMessage]);
         scrollToBottom();
-        
+
+        // 更新危机状态
+        setIsCrisis(result.isCrisis);
+
+        // 如果需要更多信息，显示提示
+        if (result.needsMoreInfo) {
+          const profile = result.profile;
+          const profileInfo = profile ? unifiedEmotionService.getProfile(uid) : null;
+          if (profileInfo && profileInfo.rounds > 1) {
+            setShowCompletionHint(true);
+          }
+        }
+
         // AI回复后，启动自动保存计时器（测试用10秒，正式60秒）
         autoSaveTimer.current = setTimeout(() => {
           triggerEmotionSave();
         }, 10000); // TODO: 上线前改回 60000
         
-      } catch (error) { console.error('AI回复失败:', error); } 
+      } catch (error) { 
+        console.error('AI回复失败:', error); 
+      } 
       finally { setIsLoading(false); }
     } else if (selectedMode === 'treehole') {
       const successMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: '你的倾诉已经安全地藏在树洞里了。谢谢你的信任。🌲', timestamp: Date.now() };
@@ -124,9 +148,19 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     }
   };
 
-  const handleModeChange = (modeId: string) => { setSelectedMode(modeId); setModeSelectorVisible(false); setMessages([]); setShowCompletionHint(false); };
+  const handleModeChange = (modeId: string) => {
+    setSelectedMode(modeId);
+    setModeSelectorVisible(false);
+    setMessages([]);
+    setShowCompletionHint(false);
+    setIsCrisis(false);
+    // 清除用户画像
+    if (userId) {
+      unifiedEmotionService.clearProfile(userId);
+    }
+  };
 
-  // 自动保存情绪关键词（静默，不显示给用户）
+  // 手动触发情绪保存
   const triggerEmotionSave = async () => {
     if (messages.length === 0) return;
     const uid = userId || 'guest';
@@ -147,23 +181,41 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     }
   };
 
-  // 获取近7天情绪历史作为AI上下文
-  const getEmotionContext = async (): Promise<any[]> => {
-    const uid = userId || 'guest';
-    try {
-      return await getRecentEmotionLogs(uid, 7);
-    } catch {
-      return [];
-    }
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
+    const isUser = item.role === 'user';
+    const isCrisisMsg = !isUser && messages.filter(m => m.role === 'user').length > 0 && 
+                        messages[messages.indexOf(item) - 1]?.content.includes('心理援助热线');
+    
+    return (
+      <View key={item.id || index} style={[s.messageContainer, isUser ? s.userMessageContainer : s.assistantMessageContainer]}>
+        <View style={[
+          s.messageBubble, 
+          isUser ? s.userBubble : (isCrisisMsg ? s.crisisBubble : s.assistantBubble)
+        ]}>
+          <Text style={[s.messageText, isUser ? s.userMessageText : (isCrisisMsg ? s.crisisMessageText : s.assistantMessageText)]}>
+            {item.content}
+          </Text>
+        </View>
+      </View>
+    );
   };
 
-  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => (
-    <View key={item.id || index} style={[s.messageContainer, item.role === 'user' ? s.userMessageContainer : s.assistantMessageContainer]}>
-      <View style={[s.messageBubble, item.role === 'user' ? s.userBubble : s.assistantBubble]}>
-        <Text style={[s.messageText, item.role === 'user' ? s.userMessageText : s.assistantMessageText]}>{item.content}</Text>
-      </View>
-    </View>
-  );
+  // 获取模式提示
+  const getModeHint = () => {
+    if (isCrisis) return '危机干预模式已启动';
+    const profile = userId ? unifiedEmotionService.getProfile(userId) : null;
+    if (profile?.needsMoreInfo) {
+      const stage = profile.conversationStage || 'INITIAL';
+      const hints: Record<string, string> = {
+        INITIAL: '正在了解你的情况...',
+        EXPLORE: '正在深入探索...',
+        INSIGHT: '正在帮你整理思绪...',
+        CLOSING: '对话即将结束',
+      };
+      return hints[stage] || '正在倾听...';
+    }
+    return null;
+  };
 
   return (
     <SafeAreaView style={s.container}>
@@ -195,7 +247,19 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
               <Text style={s.emptyDesc}>把想说的话说给{selectedMode === 'treehole' ? '树洞' : '我'}听</Text>
             </View>
           ) : (messages.map((msg) => renderMessage({ item: msg, index: messages.indexOf(msg) })))}
-          {isLoading && <View style={[s.messageContainer, s.assistantMessageContainer]}><View style={[s.messageBubble, s.assistantBubble]}><ActivityIndicator size="small" color={colors.primary} /></View></View>}
+          
+          {isLoading && (
+            <View style={[s.messageContainer, s.assistantMessageContainer]}>
+              <View style={[s.messageBubble, s.assistantBubble]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[s.assistantMessageText, { marginLeft: 8 }]}>
+                    {getModeHint() || '正在思考...'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </ScrollView>
         <View style={s.inputArea}>
           <ScrollView keyboardShouldPersistTaps="handled"><TextInput style={s.textInput} placeholder="写下你的心情..." placeholderTextColor="#999" multiline value={text} onChangeText={setText} textAlignVertical="top" editable={!isLoading} /></ScrollView>

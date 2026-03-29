@@ -38,7 +38,8 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#4A90E2",
-          "sounds": []
+          "sounds": [],
+          "projectId": "santaclaust/vibud"
         }
       ]
     ]
