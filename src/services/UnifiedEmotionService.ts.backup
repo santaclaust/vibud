@@ -1,0 +1,401 @@
+﻿/**
+ * 缁熶竴鎯呯华鐤忓鏈嶅姟妯″潡
+ * 鍩轰簬浜烘湰涓讳箟+EFT+CBT鏍稿績閫昏緫鐨勪簲闃舵AI鍊惧惉妗嗘灦
+ */
+
+import { aiService } from './AIService';
+import { ConversationStage } from './EmotionSupport/types';
+import { getRecentEmotionLogs } from './CloudBaseService';
+
+// ========== 绫诲瀷瀹氫箟 ==========
+
+// 鐢ㄦ埛鐢诲儚
+export interface UserEmotionProfile {
+  userId: string;
+  // 鏀堕泦鐨勪俊鎭?  reason?: string;
+  timeContext?: string;
+  people?: string[];
+  events?: string[];
+  history?: string;
+  hiddenEmotion?: string;
+  // 鐘舵€?  conversationStage: ConversationStage;
+  rounds: number;
+  lastGatherTime?: number;
+  // 瀵硅瘽鍘嗗彶
+  messageHistory?: string[];
+  // 鎯呯华鏃ュ織锛堜复鏃讹紝涓存椂瀛樺偍姣忚疆鍏抽敭淇℃伅锛?  tempEmotionLog?: {
+    emotionTag: string;      // 鎯呯华鏍囩
+    keyElements: string[];   // 鍏抽敭瑕佺礌锛堜汉/浜?鐗?鏃堕棿锛?    attitude: string;        // 鎬佸害鍊惧悜锛堟姉鎷?濮斿眻/鎰ゆ€掔瓑锛?    isAvoiding: boolean;     // 鏄惁鍦ㄥ洖閬?  };
+  // 褰撳墠瀵硅瘽闃舵
+  dialoguePhase: number;     // 1-5 闃舵
+}
+
+// 鏈嶅姟鍝嶅簲
+export interface EmotionServiceResponse {
+  response: string;
+  needsMoreInfo: boolean;
+  isCrisis: boolean;
+  profile?: UserEmotionProfile;
+}
+
+// ========== 閰嶇疆 ==========
+
+const CONFIG = {
+  // 鍗辨満鍏抽敭璇?  CRISIS_KEYWORDS: [
+    '鑷潃', '鑷激', '涓嶆兂娲?, '姝讳簡', '缁撴潫',
+    '浼ゅ鑷繁', '鍓茶厱', '璺虫ゼ', '瀹夌湢鑽?,
+    '娲诲浜?, '娌℃剰鎬?, '涓嶅姝讳簡',
+  ],
+  CRISIS_RESPONSE: '鎴戝惉鍒颁綘姝ｅ湪缁忓巻闈炲父鍥伴毦鐨勬椂鍒汇€備綘鐨勭敓鍛藉緢閲嶈锛岃鎷ㄦ墦蹇冪悊鎻村姪鐑嚎锛?00-161-9995銆傛垨鑰呮垜浠彲浠ュ厛鑱婅亰锛屾槸浠€涔堣浣犳湁杩欐牱鐨勬兂娉曪紵',
+  MAX_RESPONSE_LENGTH: 140,  // 鎺у埗姣忔鍥炲140瀛椾互鍐咃紝鎯呮劅闄即涓嶉渶瑕侀暱绡囧ぇ璁?};
+
+// ========== 鏍稿績鏈嶅姟绫?==========
+
+class UnifiedEmotionService {
+  private userProfiles: Map<string, UserEmotionProfile> = new Map();
+
+  /**
+   * 澶勭悊鐢ㄦ埛娑堟伅锛堢粺涓€鍏ュ彛锛?   */
+  async processMessage(
+    userMessage: string,
+    userId: string,
+    mode: 'heal' | 'consult' = 'heal',
+    historyMessages?: Array<{role: string, content: string}>  // 瀵硅瘽鍘嗗彶
+  ): Promise<EmotionServiceResponse> {
+    // ========== 璋冭瘯鏃ュ織锛氳褰曞璇濊緭鍏?==========
+    const timestamp = new Date().toISOString();
+    console.log(`[CONV] ${timestamp} [${userId}] [${mode}] INPUT: ${userMessage.slice(0, 200)}`);
+    
+    // 1. 鍗辨満妫€娴嬶紙鏈€楂樹紭鍏堢骇锛?    const crisisResult = this.checkCrisis(userMessage);
+    if (crisisResult.isCrisis) {
+      return {
+        response: crisisResult.response,
+        needsMoreInfo: false,
+        isCrisis: true,
+      };
+    }
+
+    // 2. 鑾峰彇/鏇存柊鐢ㄦ埛鐢诲儚
+    const profile = this.getOrUpdateProfile(userId, userMessage);
+
+    // 3. 鎻愬彇鍏抽敭淇℃伅锛堟儏缁爣绛?鍏抽敭瑕佺礌+鎬佸害鍊惧悜锛?    this.extractKeyInfo(userMessage, profile);
+
+    // 4. 妫€娴嬬蹇屽尯
+    if (this.detectTabooZone(userMessage)) {
+      return this.handleTabooZoneResponse(profile);
+    }
+
+    // 5. 妫€娴嬮噸澶?涓嶆弧
+    if (this.detectRepeatComplaint(userMessage)) {
+      return {
+        response: '鎶辨瓑璁╀綘鏈変笉濂界殑浣撻獙锛屾垜浼氭崲涓柟寮忛櫔浣犺亰鑱娿€備綘鎰挎剰鐨勮瘽锛屽彲浠ョ户缁璇村綋涓嬬殑鎰熷彈鍚楋紵',
+        needsMoreInfo: false,
+        isCrisis: false,
+        profile,
+      };
+    }
+
+    // 6. 璋冪敤 AI 鐢熸垚鍥炲锛堜簲闃舵閫昏緫锛?    const aiResponse = await this.generateAIResponse(userMessage, profile, mode);
+
+    // 7. 鏇存柊瀵硅瘽鍘嗗彶
+    if (!profile.messageHistory) profile.messageHistory = [];
+    profile.messageHistory.push(`U: ${userMessage}`);
+    profile.messageHistory.push(`AI: ${aiResponse}`);
+    if (profile.messageHistory.length > 6) {
+      profile.messageHistory = profile.messageHistory.slice(-6);
+    }
+
+    // 8. 灏濊瘯浠庣敤鎴锋秷鎭腑鎻愬彇鍏抽敭淇℃伅鏇存柊鐢诲儚
+    this.parseUserInfo(userMessage, profile);
+
+    return {
+      response: aiResponse,
+      needsMoreInfo: false,
+      isCrisis: false,
+      profile,
+    };
+  }
+
+  /**
+   * 鍗辨満妫€娴?   */
+  private checkCrisis(userMessage: string): { isCrisis: boolean; response: string } {
+    const lower = userMessage.toLowerCase();
+    for (const keyword of CONFIG.CRISIS_KEYWORDS) {
+      if (lower.includes(keyword)) {
+        return { isCrisis: true, response: CONFIG.CRISIS_RESPONSE };
+      }
+    }
+    return { isCrisis: false, response: '' };
+  }
+
+  /**
+   * 鎻愬彇鍏抽敭淇℃伅
+   */
+  private extractKeyInfo(message: string, profile: UserEmotionProfile): void {
+    const lower = message.toLowerCase();
+    
+    // 鎯呯华鏍囩鎻愬彇
+    const emotionTags = ['闅捐繃', '濮斿眻', '鐢熸皵', '鎰ゆ€?, '鐒﹁檻', '鐑﹁簛', '澶辨湜', '鏃犲', '鎲嬪眻', '鍫靛緱鎱?, '蹇冨瘨', '宕╂簝'];
+    let foundEmotion = '';
+    for (const emotion of emotionTags) {
+      if (lower.includes(emotion)) {
+        foundEmotion = emotion;
+        break;
+      }
+    }
+
+    // 鍏抽敭瑕佺礌鎻愬彇锛堜汉/浜?鐗?鏃堕棿锛?    const keyElements: string[] = [];
+    const peopleKeywords = ['濡堝', '鐖哥埜', '鑰佸叕', '鑰佸﹩', '鍚屼簨', '鑰佹澘', '棰嗗', '鑰佸笀', '鏈嬪弸', '瀹㈡埛'];
+    for (const kw of peopleKeywords) {
+      if (lower.includes(kw)) keyElements.push(kw);
+    }
+    const timeKeywords = ['鏄ㄥぉ', '浠婂ぉ', '鍒氭墠', '鏈€杩?, '涓婂懆', '涓婁釜鏈?];
+    for (const kw of timeKeywords) {
+      if (lower.includes(kw)) keyElements.push(kw);
+    }
+
+    // 鎬佸害鍊惧悜鎻愬彇
+    let attitude = '';
+    const attitudeKeywords = ['濮斿眻', '鐢熸皵', '鎰ゆ€?, '鏃犲', '涓嶇敇蹇?, '瀵掑績', '澶辨湜'];
+    for (const kw of attitudeKeywords) {
+      if (lower.includes(kw)) {
+        attitude = kw;
+        break;
+      }
+    }
+
+    // 璁板綍鍒颁复鏃舵儏缁棩蹇?    profile.tempEmotionLog = {
+      emotionTag: foundEmotion,
+      keyElements,
+      attitude,
+      isAvoiding: false,
+    };
+
+    // 鍚屾椂鏇存柊鐢ㄦ埛鐢诲儚鐨勮缁嗕俊鎭?    this.parseUserInfo(message, profile);
+  }
+
+  /**
+   * 妫€娴嬬蹇屽尯
+   */
+  private detectTabooZone(message: string): boolean {
+    const tabooPatterns = [
+      '涓嶆兂璇磋繖涓?, '娌′粈涔?, '鍙嶆璇翠簡涔熸病鐢?, '鍒棶浜?, '涓嶈浜?,
+      '绠椾簡', '灏辫繖鏍峰惂', '鎴戜笉鎯虫彁', '鍒啀闂簡', '浣犵儲涓嶇儲'
+    ];
+    const lower = message.toLowerCase();
+    return tabooPatterns.some(p => lower.includes(p));
+  }
+
+  /**
+   * 澶勭悊绂佸繉鍖哄洖澶?   */
+  private handleTabooZoneResponse(profile: UserEmotionProfile): EmotionServiceResponse {
+    // 鑾峰彇涓婅疆鎯呯华淇℃伅
+    const lastEmotion = profile.tempEmotionLog?.emotionTag || '杩欑鎰熷彈';
+    
+    return {
+      response: `娌″叧绯伙紝涓嶆兂璇村氨涓嶈锝炶兘鎰熷彈鍒颁綘褰撲笅鐨?{lastEmotion}锛岃鏄兂璇磋褰撲笅鐨勬劅鍙楋紝鎴戦殢鏃跺湪杩欓噷鍚綘锝瀈,
+      needsMoreInfo: false,
+      isCrisis: false,
+      profile,
+    };
+  }
+
+  /**
+   * 妫€娴嬮噸澶嶄笉婊?   */
+  private detectRepeatComplaint(message: string): boolean {
+    const patterns = ['浣犺閲嶅浜?, '閲嶅鐨勮瘽', '濂藉偦', '浣犲ソ绗?, '鎬庝箞鍙堥棶', '浣犵儲涓嶇儲'];
+    const lower = message.toLowerCase();
+    return patterns.some(p => lower.includes(p));
+  }
+
+  /**
+   * 鑾峰彇/鏇存柊鐢ㄦ埛鐢诲儚
+   */
+  private getOrUpdateProfile(userId: string, message: string): UserEmotionProfile {
+    let profile = this.userProfiles.get(userId);
+    if (!profile) {
+      console.log(`[Profile] 鏂板缓鐢诲儚 for ${userId}`);
+      profile = {
+        userId,
+        conversationStage: ConversationStage.INITIAL,
+        rounds: 0,
+        dialoguePhase: 1,  // 榛樿浠庨樁娈?寮€濮?      };
+      this.userProfiles.set(userId, profile);
+    } else {
+      console.log(`[Profile] 宸叉湁鐢诲儚 for ${userId}, rounds: ${profile.rounds}, phase: ${profile.dialoguePhase}`);
+    }
+    profile.rounds += 1;
+    return profile;
+  }
+
+  /**
+   * 瑙ｆ瀽鐢ㄦ埛淇℃伅
+   */
+  private parseUserInfo(message: string, profile: UserEmotionProfile): void {
+    const lower = message.toLowerCase();
+    
+    // 鏃堕棿鎻愬彇
+    const timePatterns = [
+      { pattern: /(\d+)\s*澶?, type: '澶? },
+      { pattern: /(\d+)\s*鍛?, type: '鍛? },
+      { pattern: /(\d+)\s*鏈?, type: '鏈? },
+      { pattern: /鏈€杩?, type: '鏈€杩? },
+      { pattern: /鏄ㄥぉ|浠婂ぉ|鍓嶅ぉ/, type: '杩戞湡' },
+    ];
+    for (const { pattern, type } of timePatterns) {
+      if (pattern.test(message) && !profile.timeContext) {
+        profile.timeContext = type;
+      }
+    }
+
+    // 浜虹墿鎻愬彇
+    const peopleKeywords = ['濡堝', '鐖哥埜', '鑰佸叕', '鑰佸﹩', '鍚屼簨', '鑰佹澘', '棰嗗', '鑰佸笀', '鍚屽', '鏈嬪弸'];
+    const foundPeople = peopleKeywords.filter(kw => lower.includes(kw));
+    if (foundPeople.length > 0) {
+      profile.people = [...(profile.people || []), ...foundPeople];
+    }
+
+    // 浜嬩欢鎻愬彇
+    const eventKeywords = ['宸ヤ綔', '鑰冭瘯', '闈㈣瘯', '杈炶亴', '鍒嗘墜', '鍚垫灦', '鐢熺梾', '鍘嬪姏', '鐒﹁檻'];
+    const foundEvents = eventKeywords.filter(kw => lower.includes(kw));
+    if (foundEvents.length > 0) {
+      profile.events = [...(profile.events || []), ...foundEvents];
+    }
+
+    // 鍘熷洜鎻愬彇
+    const reasonKeywords = ['鍥犱负', '鎵€浠?, '瀵艰嚧', '鐢变簬', '鎰熻', '瑙夊緱'];
+    const hasReason = reasonKeywords.some(kw => lower.includes(kw));
+    if (hasReason && !profile.reason) {
+      profile.reason = message.slice(0, 30);
+    }
+  }
+
+  /**
+   * 鑾峰彇鎯呯华鏃ュ織
+   */
+  private async getEmotionLogs(userId: string): Promise<string> {
+    try {
+      const logs = await getRecentEmotionLogs(userId, 7);
+      if (logs && logs.length > 0) {
+        return logs.slice(-3).map((log: { timestamp: number; textExcerpt?: string }) => 
+          `${new Date(log.timestamp).toLocaleDateString()}: ${log.textExcerpt || '鐢ㄦ埛鍒嗕韩浜嗘儏缁?}`
+        ).join('锛?);
+      }
+    } catch (e) {}
+    return '鏆傛棤鎯呯华鏃ュ織';
+  }
+
+  /**
+   * AI鐢熸垚鍥炲 - 浜旈樁娈甸€昏緫
+   */
+  private async generateAIResponse(
+    userMessage: string,
+    profile: UserEmotionProfile,
+    mode: 'heal' | 'consult'
+  ): Promise<string> {
+    // 鑾峰彇鎯呯华鏃ュ織
+    const emotionLogs = await this.getEmotionLogs(profile.userId);
+
+    // 鑾峰彇瀵硅瘽鍘嗗彶
+    const history = profile.messageHistory?.slice(-4).join('锛?) || '鏆傛棤瀵硅瘽鍘嗗彶';
+
+    // 鑾峰彇鏈疆鎻愬彇鐨勫叧閿俊鎭?    const tempLog = profile.tempEmotionLog || { emotionTag: '', keyElements: [], attitude: '' };
+    
+    // 纭畾褰撳墠闃舵
+    const phase = this.determinePhase(profile, tempLog);
+
+    // 鏋勫缓Prompt
+    const prompt = this.buildPhasePrompt(userMessage, profile, phase, emotionLogs, history, tempLog);
+
+    // 璋冭瘯鏃ュ織锛氳緭鍑哄畬鏁碢rompt
+    console.log(`[CONV] ${new Date().toISOString()} [${profile.userId}] [${mode}] === PROMPT ===`);
+    console.log(prompt);
+    console.log(`[CONV] ${new Date().toISOString()} [${profile.userId}] === END PROMPT ===`);
+
+    try {
+        // 灏?messageHistory 杞崲涓?AI 鏈熸湜鐨勬牸寮?        const historyMessages = profile.messageHistory?.map(msg => {
+          const [role, content] = msg.split(': ');
+          return { role: role.toLowerCase().includes('ai') ? 'assistant' : 'user', content };
+        });
+
+        const result = await aiService.getResponse(
+          userMessage,
+          mode,
+          undefined,
+          profile.userId,
+          historyMessages
+        );
+
+      // 璋冭瘯鏃ュ織锛氳褰旳I鍥炲
+      const aiResponse = result.text;
+      console.log(`[CONV] ${new Date().toISOString()} [${profile.userId}] [${mode}] PHASE${phase}: ${aiResponse.slice(0, 200)}`);
+
+      return aiResponse;
+    } catch (error) {
+      console.error('AI response failed:', error);
+      return '璋㈣阿浣犳効鎰忓垎浜繖浜涳紝鎴戝湪杩欓噷鍚綘璇磋锝?;
+    }
+  }
+
+  /**
+   * 纭畾褰撳墠闃舵
+   */
+  private determinePhase(profile: UserEmotionProfile, tempLog: any): number {
+    // 鏍规嵁宸叉敹闆嗙殑淇℃伅纭畾闃舵
+    const hasEmotion = !!tempLog.emotionTag;
+    const hasTime = !!profile.timeContext;
+    const hasPeople = profile.people && profile.people.length > 0;
+    const hasEvent = profile.events && profile.events.length > 0;
+    const hasHistory = !!profile.history;
+
+    if (!hasEmotion) return 1;  // 闃舵1锛氭儏缁帴绾?    if (!hasEvent && !hasPeople) return 2;  // 闃舵2锛氳绱犳帰绱?    if (!hasHistory) return 3;  // 闃舵3锛氫簨浠舵⒊鐞?    if (!profile.hiddenEmotion) return 4;  // 闃舵4锛氶敋鐐硅瘑鍒?    return 5;  // 闃舵5锛氭儏缁紑瑙?  }
+
+  /**
+   * 鏋勫缓闃舵Prompt
+   */
+  private buildPhasePrompt(
+    userMessage: string,
+    profile: UserEmotionProfile,
+    phase: number,
+    emotionLogs: string,
+    history: string,
+    tempLog: any
+  ): string {
+    const phaseNames = ['鎯呯华鎺ョ撼', '瑕佺礌鎺㈢储', '浜嬩欢姊崇悊', '閿氱偣璇嗗埆', '鎯呯华寮€瑙?];
+
+    return `浣犳槸蹇冭娊锛屼竴涓俯鏆栫殑鏈嬪弸銆傚€惧惉鏃剁湡璇氥€佸叧蹇冦€佹湁娓╁害銆?
+銆愬績鑺藉€惧惉甯堛兓缁堟瀬瑙勫垯銆?1. 鐢ㄦ埛鎻愬嚭鏄庣‘闇€姹傛椂锛屽繀椤诲厛鍥炲簲闇€姹傦紝涓嶈兘閫冮伩
+2. 鐢ㄦ埛鎸囧嚭浣犲洖绛旀満姊?娌″洖搴旀椂锛屽繀椤荤湡璇氶亾姝夛紝涓嶈兘濂楄瘽
+3. 姘歌繙绔欏湪鐢ㄦ埛杩欒竟锛屽叡鎯呬粬鐨勫灞堛€佺柌鎯€佷笉鐢?4. 姣忎竴鍙ラ兘瑕佸儚鐪熶汉鏈嬪弸锛屼笉璇存暀銆佷笉缁欐柟娉曪紝浣嗚鎺ヤ綇鎯呯华
+
+銆愮敤鎴风敾鍍忋€?- 鎯呯华鍘熷洜锛?{profile.reason || '寰呬簡瑙?}
+- 鏃堕棿鑳屾櫙锛?{profile.timeContext || '寰呬簡瑙?}
+- 鐩稿叧浜虹墿锛?{profile.people?.join('銆?) || '寰呬簡瑙?}
+- 鐩稿叧浜嬩欢锛?{profile.events?.join('銆?) || '寰呬簡瑙?}
+
+銆愬璇濆巻鍙层€?${history}
+
+銆愭湰娆＄敤鎴锋秷鎭€?${userMessage}
+
+瑙勫垯锛?1. 鏈€澶?鍙ヨ瘽
+2. 璁ょ湡鍥炲簲鐢ㄦ埛鍐呭锛岃〃杈惧叧蹇?3. 鍙ｈ鍖栵紝鍍忔湅鍙嬭亰澶?4. 鐩存帴璇翠汉璇濓紝涓嶇敤姣斿柣`;
+  }
+
+  /**
+   * 鑾峰彇鐢ㄦ埛鐢诲儚
+   */
+  getProfile(userId: string): UserEmotionProfile | undefined {
+    return this.userProfiles.get(userId);
+  }
+
+  /**
+   * 娓呴櫎鐢ㄦ埛鐢诲儚
+   */
+  clearProfile(userId: string): void {
+    this.userProfiles.delete(userId);
+  }
+}
+
+// 鍗曚緥瀵煎嚭
+export const unifiedEmotionService = new UnifiedEmotionService();
+export default unifiedEmotionService;

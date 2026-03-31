@@ -32,7 +32,7 @@ exports.main = async (context) => {
   
   // 从环境变量获取配置
   const apiKey = process.env.SILICON_API_KEY;
-  const model = process.env.SILICON_MODEL || 'Qwen/Qwen2.5-7B-Instruct';
+  const model = process.env.SILICON_MODEL || 'Pro/deepseek-ai/DeepSeek-V3.2';
   
   if (!apiKey) {
     return { success: false, error: '未配置 SILICON_API_KEY 环境变量' };

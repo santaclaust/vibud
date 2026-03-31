@@ -267,6 +267,7 @@ export default function TimeMachineScreen({ navigation, colors: propsColors, goB
       setInputText('');
       setSelectedMood(null);
       setSelectedReminder('none');
+      storageService.clearTimeMachineDraft(); // 清空草稿
       setShowSuccess(true);
       loadEntries();
       setTimeout(() => setShowSuccess(false), 2500);

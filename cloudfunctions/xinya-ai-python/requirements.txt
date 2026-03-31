@@ -1,0 +1,1 @@
+# Python 云函数依赖（Python 3.10 内置 urllib，无需额外依赖）

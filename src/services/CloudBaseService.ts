@@ -323,6 +323,51 @@ export interface EmotionLog {
   timestamp: number;
 }
 
+// ========== 对话评价 ==========
+
+export interface ConversationRating {
+  _id?: string;
+  id: string;
+  userId: string;
+  sessionId: string;
+  messageId?: string;      // 评价的具体消息ID（单条评价）
+  rating: number;          // 1-5星
+  feedback?: string;       // 可选文字反馈
+  isSessionEnd: boolean;   // 是否为会话结束评价
+  timestamp: number;
+}
+
+/** 保存对话评价 */
+export const saveConversationRating = async (rating: Omit<ConversationRating, 'id' | 'timestamp'>) => {
+  const id = 'rat_' + Date.now();
+  return await addDocument('conversation_ratings', { ...rating, id, timestamp: Date.now() });
+};
+
+/** 获取用户对话评价历史 */
+export const getConversationRatings = async (userId: string, limitCount = 30) => {
+  const res = await queryDocuments(
+    'conversation_ratings',
+    { userId },
+    [{ field: 'timestamp', order: 'desc' }],
+    limitCount
+  );
+  return res.data || [];
+};
+
+/** 获取会话的平均评分 */
+export const getSessionAvgRating = async (sessionId: string): Promise<number> => {
+  const res = await queryDocuments(
+    'conversation_ratings',
+    { sessionId },
+    undefined,
+    100
+  );
+  const ratings = res.data || [];
+  if (ratings.length === 0) return 0;
+  const sum = ratings.reduce((acc: number, r: ConversationRating) => acc + r.rating, 0);
+  return sum / ratings.length;
+};
+
 // ========== 业务层封装 ==========
 
 /** 创建/更新用户资料 */
@@ -343,6 +388,57 @@ export const saveUserProfile = async (profile: UserProfile) => {
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
   const res = await queryDocuments('users', { id: userId }, undefined, 1);
   return res.data?.[0] || null;
+};
+
+/** 获取用户情绪画像（从 user_profiles 集合） */
+export const getUserEmotionProfile = async (userId: string): Promise<any | null> => {
+  const res = await queryDocuments('user_profiles', { userId }, undefined, 1);
+  return res.data?.[0] || null;
+};
+
+/** 创建用户情绪画像 */
+export const createUserEmotionProfile = async (userId: string): Promise<any> => {
+  const now = Date.now();
+  const profile = {
+    userId,
+    updatedAt: now,
+    createdAt: now,
+    emotionProfile: {
+      dominantEmotions: [],
+      recentEmotions: [],
+      triggerScenes: [],
+      avoidanceTopics: [],
+      preferredTone: 'gentle',
+    },
+    interactionPattern: {
+      totalSessions: 0,
+      avgMessageLength: 0,
+      responseStyle: 'mixed',
+      circularCount: 0,
+      breakthroughCount: 0,
+      totalMessages: 0,
+      totalChars: 0,
+      lastActiveAt: now,
+    },
+    sessionSummaries: [],
+    personalization: {
+      firstMetAt: now,
+      lastActiveAt: now,
+      preferredGreeting: '',
+    },
+  };
+  return await addDocument('user_profiles', profile);
+};
+
+/** 更新用户情绪画像 */
+export const updateUserEmotionProfile = async (userId: string, updates: any): Promise<void> => {
+  const res = await queryDocuments('user_profiles', { userId }, undefined, 1);
+  if (res.data?.length > 0) {
+    await updateDocument('user_profiles', res.data[0]._id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+  }
 };
 
 /** 保存推送 Token */

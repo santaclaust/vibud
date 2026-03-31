@@ -3,7 +3,7 @@
  * 基于人本主义+EFT+CBT核心逻辑的五阶段AI倾听框架
  */
 
-import { aiService } from './AIService';
+import { AIService } from './AIService';
 import { ConversationStage } from './EmotionSupport/types';
 import { getRecentEmotionLogs } from './CloudBaseService';
 
@@ -19,6 +19,8 @@ export interface UserEmotionProfile {
   events?: string[];
   history?: string;
   hiddenEmotion?: string;
+  // 蒸馏摘要
+  summary?: string;
   // 状态
   conversationStage: ConversationStage;
   rounds: number;
@@ -54,7 +56,7 @@ const CONFIG = {
     '活够了', '没意思', '不如死了',
   ],
   CRISIS_RESPONSE: '我听到你正在经历非常困难的时刻。你的生命很重要，请拨打心理援助热线：400-161-9995。或者我们可以先聊聊，是什么让你有这样的想法？',
-  MAX_RESPONSE_LENGTH: 70,
+  MAX_RESPONSE_LENGTH: 140,  // 控制每次回复140字以内，情感陪伴不需要长篇大论
 };
 
 // ========== 核心服务类 ==========
@@ -68,8 +70,15 @@ class UnifiedEmotionService {
   async processMessage(
     userMessage: string,
     userId: string,
-    mode: 'heal' | 'consult' = 'heal'
+    mode: 'heal' | 'consult' = 'heal',
+    recentMessages?: Array<{role: string, content: string}>,  // 最近10轮原文
+    summary?: string,  // 蒸馏摘要
+    profileContext?: string  // 用户画像上下文
   ): Promise<EmotionServiceResponse> {
+    // ========== 调试日志：记录对话输入 ==========
+    const timestamp = new Date().toISOString();
+    console.log(`[CONV] ${timestamp} [${userId}] [${mode}] INPUT: ${userMessage.slice(0, 200)}`);
+    
     // 1. 危机检测（最高优先级）
     const crisisResult = this.checkCrisis(userMessage);
     if (crisisResult.isCrisis) {
@@ -102,7 +111,7 @@ class UnifiedEmotionService {
     }
 
     // 6. 调用 AI 生成回复（五阶段逻辑）
-    const aiResponse = await this.generateAIResponse(userMessage, profile, mode);
+    const aiResponse = await this.generateAIResponse(userMessage, profile, mode, recentMessages, summary, profileContext);
 
     // 7. 更新对话历史
     if (!profile.messageHistory) profile.messageHistory = [];
@@ -111,6 +120,9 @@ class UnifiedEmotionService {
     if (profile.messageHistory.length > 6) {
       profile.messageHistory = profile.messageHistory.slice(-6);
     }
+
+    // 8. 尝试从用户消息中提取关键信息更新画像
+    this.parseUserInfo(userMessage, profile);
 
     return {
       response: aiResponse,
@@ -224,6 +236,7 @@ class UnifiedEmotionService {
   private getOrUpdateProfile(userId: string, message: string): UserEmotionProfile {
     let profile = this.userProfiles.get(userId);
     if (!profile) {
+      console.log(`[Profile] 新建画像 for ${userId}`);
       profile = {
         userId,
         conversationStage: ConversationStage.INITIAL,
@@ -231,6 +244,8 @@ class UnifiedEmotionService {
         dialoguePhase: 1,  // 默认从阶段1开始
       };
       this.userProfiles.set(userId, profile);
+    } else {
+      console.log(`[Profile] 已有画像 for ${userId}, rounds: ${profile.rounds}, phase: ${profile.dialoguePhase}`);
     }
     profile.rounds += 1;
     return profile;
@@ -299,7 +314,10 @@ class UnifiedEmotionService {
   private async generateAIResponse(
     userMessage: string,
     profile: UserEmotionProfile,
-    mode: 'heal' | 'consult'
+    mode: 'heal' | 'consult',
+    recentMessages?: Array<{role: string, content: string}>,
+    summary?: string,
+    profileContext?: string
   ): Promise<string> {
     // 获取情绪日志
     const emotionLogs = await this.getEmotionLogs(profile.userId);
@@ -313,26 +331,34 @@ class UnifiedEmotionService {
     // 确定当前阶段
     const phase = this.determinePhase(profile, tempLog);
 
-    // 构建Prompt
-    const prompt = this.buildPhasePrompt(userMessage, profile, phase, emotionLogs, history, tempLog);
+    // 如果传入的是完整 Prompt（来自 PromptBuilder），直接使用
+    if (profileContext && profileContext.length > 100 && profileContext.includes('心芽')) {
+      console.log('[AI] 使用完整 Prompt，长度:', profileContext.length);
+      try {
+        const ai = AIService.getInstance();
+        const result = await ai.getResponse(profileContext);
+        console.log(`[CONV] AI回复长度: ${(result || '').length}`);
+        return result;
+      } catch (error) {
+        console.error('AI response failed:', error);
+        return '谢谢你愿意分享这些，我在这里听你说说～';
+      }
+    }
 
+    // 旧接口兼容：使用 memoryData
     try {
-        // 将 messageHistory 转换为 AI 期望的格式
-        const historyMessages = profile.messageHistory?.map(msg => {
-          const [role, content] = msg.split(': ');
-          return { role: role.toLowerCase().includes('ai') ? 'assistant' : 'user', content };
-        });
+      const memoryData = {
+        summary: summary || '',
+        recentMessages: recentMessages || [],
+        profile: profileContext || '',
+      };
 
-        const result = await aiService.getResponse(
-          userMessage,
-          mode,
-          undefined,  // emotionHistory: 暂不使用，由 buildPhasePrompt 提供上下文
-          profile.userId,
-          historyMessages  // messages: 对话历史，用于学习用户风格
-        );
-
-      // 直接返回AI响应，不做长度截断
-      return result.text;
+      const ai = AIService.getInstance();
+      const result = await ai.getResponseLegacy(userMessage, memoryData);
+      const aiResponse = typeof result === 'string' ? result : (result.text || result);
+      
+      console.log(`[CONV] ${new Date().toISOString()} [${profile.userId}] [${mode}] PHASE${phase}: ${(aiResponse || '').slice(0, 200)}`);
+      return aiResponse;
     } catch (error) {
       console.error('AI response failed:', error);
       return '谢谢你愿意分享这些，我在这里听你说说～';
@@ -370,51 +396,31 @@ class UnifiedEmotionService {
   ): string {
     const phaseNames = ['情绪接纳', '要素探索', '事件梳理', '锚点识别', '情绪开解'];
 
-    return `你是心芽的AI倾听师，采用人本主义+EFT+CBT核心逻辑。
-你的定位是：温暖陪伴的朋友，不是AI专家或咨询师。不要给建议，不要给解决方案，不要说教。
+    return `你是心芽，一个温暖的朋友。倾听时真诚、关心、有温度。
 
-【当前阶段】${phaseNames[phase-1]}（共5阶段）
+【心芽倾听师・终极规则】
+1. 用户提出明确需求时，必须先回应需求，不能逃避
+2. 用户指出你回答机械/没回应时，必须真诚道歉，不能套话
+3. 永远站在用户这边，共情他的委屈、疲惫、不甘
+4. 每一句都要像真人朋友，不说教、不给方法，但要接住情绪
 
 【用户画像】
 - 情绪原因：${profile.reason || '待了解'}
 - 时间背景：${profile.timeContext || '待了解'}
 - 相关人物：${profile.people?.join('、') || '待了解'}
 - 相关事件：${profile.events?.join('、') || '待了解'}
-- 历史经历：${profile.history || '待了解'}
-- 潜在情绪：${profile.hiddenEmotion || '待了解'}
-
-【情绪日志】
-${emotionLogs}
 
 【对话历史】
 ${history}
 
-【本轮提取的关键信息】
-- 情绪标签：${tempLog.emotionTag || '待识别'}
-- 关键要素：${tempLog.keyElements?.join('、') || '待识别'}
-- 态度倾向：${tempLog.attitude || '待识别'}
-
 【本次用户消息】
 ${userMessage}
 
-【核心原则】
-1. 你是朋友，不是AI。每句话要像真人说话，不要像机器人回复
-2. 多问用户的具体情况：什么专业？什么时候发生的？当时你在做什么？
-3. 不要给答案或建议，要引导用户自己说出来
-4. 回复长度30-80字，自然就好，不要刻意控制
-5. 禁止用"..."截断句子，要完整表达
-6. 不重复问同样的问题！基于上轮信息回应
-7. 先共情用户情绪，再轻量提问
-8. 用户提供了新信息要先回应
-9. 识别到回避/抗拒立即停止追问
-10. 口语化自然，像朋友聊天，不要用"首先""其次""综上所述"等官方表达
-
-【阶段要求】
-阶段1：共情+确认情绪，不急于提问
-阶段2：模糊提问人/事/物/时间
-阶段3：跟随用户节奏，不追问细节
-阶段4：提炼锚点+确认提问
-阶段5：共情+轻量引导，不给解决方案`;
+规则：
+1. 最多2句话
+2. 认真回应用户内容，表达关心
+3. 口语化，像朋友聊天
+4. 直接说人话，不用比喻`;
   }
 
   /**

@@ -46,6 +46,19 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// 对话历史记录（用于用户回查）
+export interface ChatHistoryRecord {
+  sessionId: string;
+  timestamp: number;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: number;
+  }>;
+  rating: number;
+  feedback?: string | null;
+}
+
 // 通用存储服务
 class StorageService {
   private async getItem<T>(key: string): Promise<T | null> {
@@ -175,6 +188,15 @@ class StorageService {
   async getTreeHoleDraft(): Promise<{ text: string; timestamp: number } | null> {
     return await this.getItem(STORAGE_KEYS.DRAFT_TREEHOLE);
   }
+  
+  // 清空树洞草稿
+  async clearTreeHoleDraft(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_TREEHOLE);
+    } catch (error) {
+      console.error('Error clearing treehole draft:', error);
+    }
+  }
 
   // 保存倾诉草稿
   async saveConfessionDraft(text: string, mode: string): Promise<void> {
@@ -185,6 +207,15 @@ class StorageService {
   async getConfessionDraft(): Promise<{ text: string; mode: string; timestamp: number } | null> {
     return await this.getItem(STORAGE_KEYS.DRAFT_CONFESSION);
   }
+  
+  // 清空倾诉草稿（发送后调用）
+  async clearConfessionDraft(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_CONFESSION);
+    } catch (error) {
+      console.error('Error clearing confession draft:', error);
+    }
+  }
 
   // 保存时光机草稿
   async saveTimeMachineDraft(text: string, mood: string | null): Promise<void> {
@@ -194,6 +225,43 @@ class StorageService {
   // 读取时光机草稿
   async getTimeMachineDraft(): Promise<{ text: string; mood: string | null; timestamp: number } | null> {
     return await this.getItem(STORAGE_KEYS.DRAFT_TIMEMACHINE);
+  }
+  
+  // 清空时光机草稿
+  async clearTimeMachineDraft(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_TIMEMACHINE);
+    } catch (error) {
+      console.error('Error clearing timemachine draft:', error);
+    }
+  }
+  
+  // ========== 对话历史存储 ==========
+  
+  // 保存对话历史（用户可回查）- 支持更新已有记录
+  async saveChatHistory(record: ChatHistoryRecord): Promise<void> {
+    try {
+      let history = await this.getChatHistoryList();
+      // 如果已存在相同 sessionId，先移除（更新）
+      history = history.filter(h => h.sessionId !== record.sessionId);
+      history.unshift(record); // 最新在前
+      // 保留最近50条
+      const trimmed = history.slice(0, 50);
+      await this.setItem(STORAGE_KEYS.CHAT_HISTORY, trimmed);
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+    }
+  }
+  
+  // 获取对话历史列表
+  async getChatHistoryList(): Promise<ChatHistoryRecord[]> {
+    return await this.getItem(STORAGE_KEYS.CHAT_HISTORY) || [];
+  }
+  
+  // 获取单条对话详情
+  async getChatHistory(sessionId: string): Promise<ChatHistoryRecord | null> {
+    const history = await this.getChatHistoryList();
+    return history.find(h => h.sessionId === sessionId) || null;
   }
 }
 

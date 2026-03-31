@@ -118,6 +118,7 @@ export default function TreeHoleScreen({ navigation, colors: propsColors, goBack
     try {
       await storageService.postToTreeHole(inputText.trim());
       setInputText('');
+      storageService.clearTreeHoleDraft(); // 清空草稿
       setShowSuccess(true);
       loadPosts();
       setTimeout(() => setShowSuccess(false), 2000);

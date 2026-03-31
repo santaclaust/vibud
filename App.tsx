@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, StatusBar } from 'react-native';
+import { View, StyleSheet, StatusBar, Platform } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import ConfessionScreen from './src/screens/ConfessionScreen';
 import MessageScreen from './src/screens/MessageScreen';
@@ -51,7 +51,10 @@ export default function App() {
           await initUserProfile(authState.user.uid);
         }
       }
-      await notificationService.init();
+      // 非 Web 端才初始化推送通知
+      if (Platform.OS !== 'web') {
+        await notificationService.init();
+      }
       
       // 监听通知点击
       notificationService.addNotificationResponseReceivedListener((response) => {

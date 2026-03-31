@@ -1,0 +1,6 @@
+{
+  "cors": true,
+  "allowedOrigins": "*",
+  "allowedHeaders": ["Content-Type", "Authorization", "*"],
+  "allowedMethods": ["POST", "OPTIONS", "GET"]
+}
