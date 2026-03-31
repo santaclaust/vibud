@@ -45,6 +45,9 @@ export interface FeedbackAnalysis {
   preferPhrases: string[];
   avoidPhrases: string[];
   forbiddenActions: string[];
+  positiveFeedbackCount: number;  // 好评次数
+  negativeFeedbackCount: number; // 差评次数
+  totalFeedbackCount: number;     // 总反馈次数
 }
 
 // ========== Prompt 配置 ==========

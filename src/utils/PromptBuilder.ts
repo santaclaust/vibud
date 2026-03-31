@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 动态 Prompt 构建器
  * 根据用户画像 + 反馈偏好 + 对话上下文构建最优 Prompt
  */
@@ -50,17 +50,23 @@ export function buildFinalPrompt(config: PromptConfig): string {
     parts.push(...formatUserStyle(config.feedbackAnalysis));
   }
 
-  // 4. 最近对话（最近4轮就够了）
+  // 4. 最近对话（提取核心诉求，减少 Token）
   if (config.recentMessages && config.recentMessages.length > 0) {
     parts.push('\n【最近对话】');
+    // 只取最近 4 轮，每轮截断到 100 字
     const recent = config.recentMessages.slice(-4);
     recent.forEach(m => {
-      parts.push(`${m.role === 'user' ? '用户' : '我'}: ${m.content}`);
+      const content = m.content.length > 100 ? m.content.slice(0, 100) + '...' : m.content;
+      parts.push(`${m.role === 'user' ? '用户' : '我'}: ${content}`);
     });
   }
 
   // 5. 当前消息
   parts.push(`\n用户说：${config.currentMessage}`);
+  
+  // 6. 兜底规则
+  parts.push(`\n【兜底规则】\n- 无法判断意图时，默认纯倾诉\n- 禁止极端建议「直接离职」「硬刚」「离婚」\n- 只给参考思路，禁止替用户做决定\n- 必须口语化`);
+  
   parts.push('\n请回复：');
 
   return parts.join('\n');
@@ -93,12 +99,28 @@ function formatProfile(p: any): string[] {
   return lines;
 }
 
-// 格式化用户偏好
+// 格式化用户偏好（含反馈闭环）
 function formatUserStyle(analysis: FeedbackAnalysis): string[] {
   const lines: string[] = [];
   
+  // 禁用词（用户不喜欢的表达）
   if (analysis.avoidPhrases.length > 0) {
-    lines.push(`不要说：${analysis.avoidPhrases.join('、')}`);
+    lines.push(`禁止：${analysis.avoidPhrases.slice(0, 5).join('、')}`);
+  }
+  
+  // 偏好词（用户喜欢的表达）
+  if (analysis.preferPhrases.length > 0) {
+    lines.push(`推荐使用：${analysis.preferPhrases.slice(0, 5).join('、')}`);
+  }
+  
+  // 负面反馈修正规则
+  if (analysis.negativeFeedbackCount > analysis.positiveFeedbackCount * 2) {
+    lines.push(`【重要】用户近期反馈较差，请减少提问，优先给出思路`);
+  }
+  
+  // 正面反馈强化规则
+  if (analysis.positiveFeedbackCount > analysis.negativeFeedbackCount * 2) {
+    lines.push(`【重要】用户喜欢直接给建议，多给具体表达思路`);
   }
   
   return lines;
