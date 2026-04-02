@@ -6,6 +6,16 @@
 import { AIService } from './AIService';
 import { ConversationStage } from './EmotionSupport/types';
 import { getRecentEmotionLogs } from './CloudBaseService';
+// 🆕 集成记忆系统
+import { 
+  initializeMemorySystem, 
+  quickSaveEmotion, 
+  buildMemoryPrompt,
+  getUserProfileSummary 
+} from './MemorySystem';
+// 🆕 集成语料库系统
+import { corpusManager, corpusEvaluator, initializeCorpus } from './CorpusManager';
+import { CORPUS_DATA } from './EmotionSupport/corpus-data';
 
 // ========== 类型定义 ==========
 
@@ -64,6 +74,20 @@ const CONFIG = {
 class UnifiedEmotionService {
   private userProfiles: Map<string, UserEmotionProfile> = new Map();
 
+  constructor() {
+    // 🆕 初始化记忆系统
+    initializeMemorySystem().catch(err => 
+      console.error('记忆系统初始化失败:', err)
+    );
+    // 🆕 初始化语料库
+    try {
+      initializeCorpus(CORPUS_DATA);
+      console.log('[UnifiedEmotion] 语料库已加载');
+    } catch (err) {
+      console.error('语料库初始化失败:', err);
+    }
+  }
+
   /**
    * 处理用户消息（统一入口）
    */
@@ -121,7 +145,20 @@ class UnifiedEmotionService {
       profile.messageHistory = profile.messageHistory.slice(-6);
     }
 
-    // 8. 尝试从用户消息中提取关键信息更新画像
+    // 8. 🆕 自动保存到记忆系统
+    const detectedEmotion = profile.tempEmotionLog?.emotionTag;
+    const detectedTrigger = profile.events?.[0];
+    if (detectedEmotion && userMessage.length > 30) {
+      quickSaveEmotion({
+        emotion: detectedEmotion,
+        trigger: detectedTrigger,
+        intensity: 5,
+        content: `用户: ${userMessage.slice(0, 200)}`,
+        description: `对话提取: ${detectedEmotion}`,
+      }).catch(err => console.error('保存记忆失败:', err));
+    }
+
+    // 9. 尝试从用户消息中提取关键信息更新画像
     this.parseUserInfo(userMessage, profile);
 
     return {
@@ -322,6 +359,14 @@ class UnifiedEmotionService {
     // 获取情绪日志
     const emotionLogs = await this.getEmotionLogs(profile.userId);
 
+    // 🆕 获取记忆系统上下文
+    let memoryContext = '';
+    try {
+      memoryContext = await getUserProfileSummary();
+    } catch (e) {
+      console.log('获取记忆上下文失败:', e);
+    }
+
     // 获取对话历史
     const history = profile.messageHistory?.slice(-4).join('；') || '暂无对话历史';
 
@@ -421,6 +466,50 @@ ${userMessage}
 2. 认真回应用户内容，表达关心
 3. 口语化，像朋友聊天
 4. 直接说人话，不用比喻`;
+  }
+
+  /**
+   * 🆕 根据阶段获取语料引导
+   */
+  private getCorpusGuidance(phase: number, tempLog: any): string | null {
+    try {
+      // 阶段对应的语料类别
+      const phaseCategoryMap: Record<number, [string, string]> = {
+        1: ['01_通用安抚承接语', '情绪确认类'],      // 情绪接纳
+        2: ['02_浅层倾诉引导语', '事件挖掘类'],      // 要素探索
+        3: ['03_事件叙述引导语', '时间引导类'],      // 事件梳理
+        4: ['04_循环重复突破话术', '循环重复类'],    // 锚点识别
+        5: ['07_深度总结引导语', '总结类'],         // 情绪开解
+      };
+      
+      const [category, subcategory] = phaseCategoryMap[phase] || ['01_通用安抚承接语', '情绪确认类'];
+      const item = corpusManager.getItem(category, subcategory);
+      
+      if (item) {
+        corpusManager.recordUsage(item);
+        return item.content;
+      }
+      return null;
+    } catch (e) {
+      console.log('[Corpus] 获取引导语失败:', e);
+      return null;
+    }
+  }
+
+  /**
+   * 🆕 处理用户反馈（用于语料评分）
+   */
+  recordFeedback(userMessage: string, aiResponse: string, feedback: 'like' | 'neutral' | 'dislike'): void {
+    try {
+      // 找到对应的语料并更新评分
+      const items = corpusManager.getAllItems();
+      const matched = items.find(i => i.content === aiResponse);
+      if (matched) {
+        corpusEvaluator.processFeedback(matched, feedback);
+      }
+    } catch (e) {
+      console.log('[Corpus] 记录反馈失败:', e);
+    }
   }
 
   /**

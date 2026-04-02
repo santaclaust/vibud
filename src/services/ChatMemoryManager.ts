@@ -6,6 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile, Message, toAIContext } from '../types/UserProfile';
 import { generateProfileFromChat, mergeProfile, inferChatStyle, inferPersonality } from '../utils/ProfileParser';
+import { addDocument, queryDocuments, updateDocument, initCloudBase } from './CloudBaseService';
 
 const SESSION_KEY = 'CHAT_SESSION';
 const PROFILE_KEY = 'USER_PROFILE';
@@ -246,6 +247,80 @@ export class ChatMemoryManager {
       recentMessages: [],
     };
     await this.save();
+  }
+
+  // ========== CloudBase 云端同步 ==========
+  
+  // 同步到云端
+  async syncToCloud(userId: string): Promise<boolean> {
+    try {
+      await initCloudBase();
+      
+      const uploadPkg = this.getUploadPackage();
+      
+      // 查询是否存在
+      const existing = await queryDocuments('user_profiles', { userId }, undefined, 1);
+      
+      if (existing.data && existing.data.length > 0) {
+        // 更新
+        await updateDocument('user_profiles', existing.data[0]._id, {
+          ...uploadPkg.profile,
+          summary: uploadPkg.summary,
+          lastSyncAt: Date.now(),
+          userId,
+        });
+      } else {
+        // 创建
+        await addDocument('user_profiles', {
+          ...uploadPkg.profile,
+          summary: uploadPkg.summary,
+          lastSyncAt: Date.now(),
+          userId,
+          createdAt: Date.now(),
+        });
+      }
+      
+      console.log('[ChatMemory] 云端同步成功');
+      return true;
+    } catch (e) {
+      console.error('[ChatMemory] 云端同步失败:', e);
+      return false;
+    }
+  }
+
+  // 从云端恢复
+  async restoreFromCloud(userId: string): Promise<boolean> {
+    try {
+      await initCloudBase();
+      
+      const existing = await queryDocuments('user_profiles', { userId }, undefined, 1);
+      
+      if (existing.data && existing.data.length > 0) {
+        const cloudProfile = existing.data[0];
+        
+        // 恢复画像
+        if (cloudProfile.emotionProfile) {
+          this.profile = {
+            ...this.profile,
+            ...cloudProfile,
+          };
+        }
+        
+        // 恢复摘要
+        if (cloudProfile.summary) {
+          this.memory.summary = cloudProfile.summary;
+        }
+        
+        await this.saveProfile();
+        console.log('[ChatMemory] 云端恢复成功');
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      console.error('[ChatMemory] 云端恢复失败:', e);
+      return false;
+    }
   }
 
   // 清空全部（包括画像）

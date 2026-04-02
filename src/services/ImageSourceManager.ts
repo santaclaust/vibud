@@ -15,11 +15,10 @@ export function setImageSource(source: ImageSource): void {
   currentSource = source;
 }
 
-// 循环切换图片源
+// 循环切换图片源（跳过 pixabay）
 export function toggleImageSource(): ImageSource {
   switch (currentSource) {
-    case 'pexels': currentSource = 'pixabay'; break;
-    case 'pixabay': currentSource = 'lorempicsum'; break;
+    case 'pexels': currentSource = 'lorempicsum'; break;
     case 'lorempicsum': currentSource = 'pexels'; break;
   }
   return currentSource;
@@ -28,11 +27,8 @@ export function toggleImageSource(): ImageSource {
 // 直接设置图片源（保留兼容旧调用）
 export const cycleToNextSource = toggleImageSource;
 
-// 统一搜索接口
+// 统一搜索接口（跳过 pixabay）
 export async function searchImage(quoteText: string, category: string = 'all'): Promise<string | null> {
-  if (currentSource === 'pixabay') {
-    return await pixabaySearch(quoteText, category);
-  }
   if (currentSource === 'lorempicsum') {
     // Lorem Picsum 不支持搜索，返回随机图
     return await loremPicsumGetRandom(1080, 1920);

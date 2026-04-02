@@ -11,7 +11,7 @@ import TabBar from './src/components/TabBar';
 import CenterMenu from './src/components/CenterMenu';
 import { useTheme } from './src/hooks/useTheme';
 import notificationService from './src/services/NotificationService';
-import { initCloudBase, saveUserProfile, getUserProfile, logout } from './src/services/CloudBaseService';
+import { initCloudBase, reinitCloudBase, saveUserProfile, getUserProfile, logout } from './src/services/CloudBaseService';
 import logger from './src/services/Logger';
 
 type ScreenName = 'Home' | 'Confession' | 'Message' | 'Profile' | 'Community' | 'TreeHole' | 'TimeMachine';
@@ -93,8 +93,12 @@ export default function App() {
     }
   }, []);
 
-  const handleCustomLogin = useCallback((username: string) => {
+  const handleCustomLogin = useCallback(async (username: string) => {
     logger.log('[App] onCustomLogin:', username);
+    
+    // 🆕 重新初始化 CloudBase（切换用户后需要新的登录状态）
+    await reinitCloudBase();
+    
     const newUid = `user_${username}_${Date.now()}`;
     setUserId(newUid);
     setUserInfo({ nickname: username, stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });

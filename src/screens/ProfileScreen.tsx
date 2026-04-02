@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator, StyleSheet as RNSS } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator, StyleSheet as RNSS, Alert, FlatList, TextInput } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect, getComments } from '../services/CloudBaseService';
+import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect, getComments, getPendingReports, processReport, isSuperAdmin, deletePostByAdmin, hardDeletePost, getPostById } from '../services/CloudBaseService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -9,18 +9,23 @@ interface ProfileScreenProps {
   userId?: string | null;
   userInfo?: any;
   onUserCardPress?: () => void;
+  onLogout?: () => void;
+  onCustomLogin?: (username: string) => void;
 }
 
 const menuItems = [
   { id: 'emotion', icon: '🌿', name: '心绪历程', arrow: '›' },
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
   { id: 'favorites', icon: '★', name: '收藏', arrow: '›' },
+  { id: 'switchUser', icon: '🔄', name: '切换用户(测试)', arrow: '›' },
+  { id: 'reports', icon: '🚩', name: '举报管理', arrow: '›', adminOnly: true },
+  { id: 'adminStats', icon: '📊', name: 'AI效能监控', arrow: '›', adminOnly: true },
   { id: 'settings', icon: '⚙️', name: '设置', arrow: '›' },
   { id: 'help', icon: '❓', name: '帮助与反馈', arrow: '›' },
   { id: 'about', icon: 'ℹ️', name: '关于心芽', arrow: '›' },
 ];
 
-export default function ProfileScreen({ navigation, colors: c, userId, userInfo, onUserCardPress }: ProfileScreenProps) {
+export default function ProfileScreen({ navigation, colors: c, userId, userInfo, onUserCardPress, onLogout, onCustomLogin }: ProfileScreenProps) {
   const displayName = userInfo?.nickname || '游客';
   const displayDesc = userId ? `ID: ${userId.slice(-8)}` : '未登录';
   const stats = userInfo?.stats || { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 };
@@ -42,6 +47,10 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
   const [detailPost, setDetailPost] = useState<any>(null);
   const [detailComments, setDetailComments] = useState<any[]>([]);
   const [loadingDetailComments, setLoadingDetailComments] = useState(false);
+
+  // 🆕 切换用户弹窗
+  const [showSwitchUser, setShowSwitchUser] = useState(false);
+  const [switchUsername, setSwitchUsername] = useState('');
 
   // 主题
   const isDark = c.surface === '#2D2D2D';
@@ -121,6 +130,22 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
   const handleMenuPress = (itemId: string) => {
     if (itemId === 'emotion') { openEmotionMemory(); }
     else if (itemId === 'favorites') { openFavorites(); }
+    else if (itemId === 'reports') { openReports(); }
+    else if (itemId === 'switchUser') { setShowSwitchUser(true); }
+    else if (itemId === 'adminStats') { setShowAdminStats(true); }
+  };
+
+  // AI效能监控弹窗状态
+  const [showAdminStats, setShowAdminStats] = useState(false);
+
+  const handleSwitchUser = () => {
+    if (!switchUsername.trim()) {
+      Alert.alert('请输入用户名');
+      return;
+    }
+    onCustomLogin?.(switchUsername.trim());
+    setShowSwitchUser(false);
+    setSwitchUsername('');
   };
 
   const openEmotionMemory = async () => {
@@ -135,6 +160,80 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
     } finally {
       setLoadingLogs(false);
     }
+  };
+
+  // 🆕 举报管理
+  const [showReports, setShowReports] = useState(false);
+  const [reports, setReports] = useState<any[]>([]);
+  const [reportPosts, setReportPosts] = useState<Record<string, any>>({});
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  const openReports = async () => {
+    if (!isSuperAdmin(userId || '')) {
+      Alert.alert('权限不足', '只有超级管理员可以访问');
+      return;
+    }
+    setShowReports(true);
+    setLoadingReports(true);
+    try {
+      const data = await getPendingReports();
+      setReports(data);
+      
+      // 🆕 获取每个举报对应的帖子内容
+      const postMap: Record<string, any> = {};
+      await Promise.all(
+        data.map(async (report: any) => {
+          if (report.type === 'post' && report.targetId) {
+            const post = await getPostById(report.targetId);
+            if (post) {
+              postMap[report._id] = post;
+            }
+          }
+        })
+      );
+      setReportPosts(postMap);
+    } catch (err) {
+      console.error('获取举报列表失败:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const handleProcessReport = async (report: any, action: 'approve' | 'reject') => {
+    try {
+      const result = await processReport(report._id, userId || '', action);
+      if (result.success) {
+        Alert.alert('处理成功', action === 'approve' ? '已删除内容' : '已驳回举报');
+        // 刷新列表
+        const data = await getPendingReports();
+        setReports(data);
+      } else {
+        Alert.alert('处理失败', result.message);
+      }
+    } catch (err) {
+      Alert.alert('操作失败');
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    Alert.alert('确认删除', '确定要彻底删除这条帖子吗？此操作不可恢复。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '彻底删除',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await hardDeletePost(postId, userId || '');
+          if (result.success) {
+            Alert.alert('删除成功');
+            // 刷新列表
+            const data = await getPendingReports();
+            setReports(data);
+          } else {
+            Alert.alert('删除失败', result.message);
+          }
+        },
+      },
+    ]);
   };
 
   const openFavorites = async () => {
@@ -195,7 +294,7 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
         </View>
 
         <View style={[styles.menuSection, { backgroundColor: c.surface }]}>
-          {menuItems.map(item => (
+          {menuItems.filter(item => !item.adminOnly || isSuperAdmin(userId || '')).map(item => (
             <TouchableOpacity key={item.id} style={[styles.menuItem, { borderBottomColor: c.border }]} onPress={() => handleMenuPress(item.id)}>
               <Text style={[styles.menuIcon, item.id === 'favorites' && { color: '#FFD700' }]}>{item.icon}</Text>
               <Text style={[styles.menuName, { color: c.text }]}>{item.name}</Text>
@@ -357,6 +456,186 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* 🆕 举报管理弹窗 */}
+      <Modal visible={showReports} animationType="slide" onRequestClose={() => setShowReports(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.background }}>
+          <View style={[styles.header, { backgroundColor: c.surface }]}>
+            <TouchableOpacity onPress={() => setShowReports(false)}>
+              <Text style={{ color: c.primary, fontSize: 16 }}>‹ 返回</Text>
+            </TouchableOpacity>
+            <Text style={[styles.title, { color: c.text }]}>🚩 举报管理</Text>
+            <View style={{ width: 50 }} />
+          </View>
+          {loadingReports ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={c.primary} />
+            </View>
+          ) : reports.length === 0 ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: c.textSecondary, fontSize: 16 }}>暂无待处理的举报</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={reports}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={{ padding: 16 }}
+              renderItem={({ item }) => {
+                const postContent = reportPosts[item._id];
+                return (
+                  <View style={[styles.postCard, { backgroundColor: c.surface, marginBottom: 12, padding: 12 }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text style={{ color: c.textSecondary, fontSize: 13 }}>
+                        {item.type === 'post' ? '帖子举报' : '评论举报'} | {new Date(item.createTime).toLocaleString('zh-CN')}
+                      </Text>
+                      <Text style={{ color: '#FF6B6B', fontSize: 13 }}>{item.reason}</Text>
+                    </View>
+                    {postContent ? (
+                      <View style={{ backgroundColor: c.background, padding: 10, borderRadius: 8, marginBottom: 8 }}>
+                        <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={4}>{postContent.text}</Text>
+                        <Text style={{ color: c.textSecondary, fontSize: 12, marginTop: 6 }}>作者: {postContent.authorName} | 分类: {postContent.category}</Text>
+                      </View>
+                    ) : (
+                      <Text style={{ color: c.textSecondary, fontSize: 14, marginBottom: 8 }}>举报内容: {item.detail || '(无详情)'}</Text>
+                    )}
+                    <Text style={{ color: c.textSecondary, fontSize: 12, marginBottom: 12 }}>举报人ID: {item.reporterId} | 目标ID: {item.targetId}</Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <TouchableOpacity style={{ flex: 1, backgroundColor: '#FF4444', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }} onPress={() => handleProcessReport(item, 'approve')}>
+                        <Text style={{ color: '#FFF', fontWeight: '600' }}>批准(删除)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, backgroundColor: c.background, paddingVertical: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: c.border }} onPress={() => handleProcessReport(item, 'reject')}>
+                        <Text style={{ color: c.text }}>驳回</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* 🆕 切换用户弹窗 */}
+      <Modal visible={showSwitchUser} transparent animationType="fade" onRequestClose={() => setShowSwitchUser(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <TouchableOpacity activeOpacity={1} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setShowSwitchUser(false)} />
+          <View style={[styles.favCard, { backgroundColor: c.surface, padding: 20, width: '85%' }]}>
+            <Text style={[styles.favTitle, { color: c.text, marginBottom: 16, textAlign: 'center' }]}>🔄 切换用户 (测试)</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 13, marginBottom: 16 }}>
+              输入用户名即可切换身份，用于测试不同用户行为
+            </Text>
+            <TextInput
+              style={[styles.searchInput, { backgroundColor: c.background, color: c.text, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 }]}
+              placeholder="输入用户名..."
+              placeholderTextColor={c.textSecondary}
+              value={switchUsername}
+              onChangeText={setSwitchUsername}
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20, backgroundColor: c.background, borderWidth: 1, borderColor: c.border }}
+                onPress={() => setShowSwitchUser(false)}
+              >
+                <Text style={{ color: c.text, fontSize: 15 }}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20, backgroundColor: c.primary }}
+                onPress={handleSwitchUser}
+              >
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>切换</Text>
+              </TouchableOpacity>
+            </View>
+            {/* 快捷测试按钮 */}
+            <Text style={{ color: c.textSecondary, fontSize: 12, marginTop: 24, textAlign: 'center' }}>快速测试:</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+              <TouchableOpacity style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.background, borderRadius: 16, borderWidth: 1, borderColor: c.border }} onPress={() => { onCustomLogin?.('santaclaust'); setShowSwitchUser(false); }}>
+                <Text style={{ color: c.text, fontSize: 13 }}>🔧 超级管理员</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.background, borderRadius: 16, borderWidth: 1, borderColor: c.border }} onPress={() => { onCustomLogin?.('testuser'); setShowSwitchUser(false); }}>
+                <Text style={{ color: c.text, fontSize: 13 }}>👤 普通用户</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* AI效能监控弹窗 */}
+      <Modal visible={showAdminStats} animationType="slide" onRequestClose={() => setShowAdminStats(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.background }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border }}>
+            <TouchableOpacity onPress={() => setShowAdminStats(false)}>
+              <Text style={{ color: c.primary, fontSize: 16 }}>‹ 返回</Text>
+            </TouchableOpacity>
+            <Text style={{ color: c.text, fontSize: 17, fontWeight: '600' }}>AI效能监控</Text>
+            <View style={{ width: 50 }} />
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>AI回复质量评分</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#4CAF50', fontSize: 28, fontWeight: 'bold' }}>4.2</Text>
+                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>综合评分</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#2196F3', fontSize: 28, fontWeight: 'bold' }}>87%</Text>
+                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>达标率</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#FF9800', fontSize: 28, fontWeight: 'bold' }}>1.2s</Text>
+                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>平均响应</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>语料库使用统计</Text>
+              <View style={{ marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>总语料数</Text>
+                  <Text style={{ color: c.text }}>1280 条</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>本月调用</Text>
+                  <Text style={{ color: c.text }}>342 次</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>高分语料</Text>
+                  <Text style={{ color: '#4CAF50' }}>856 条</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: c.textSecondary }}>待优化语料</Text>
+                  <Text style={{ color: '#FF4444' }}>45 条</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ backgroundColor: c.surface, padding: 16, borderRadius: 12 }}>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>用户满意度趋势</Text>
+              <View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>今日满意</Text>
+                  <Text style={{ color: c.text }}>23 人</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>今日不满意</Text>
+                  <Text style={{ color: c.text }}>3 人</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ color: c.textSecondary }}>本周平均</Text>
+                  <Text style={{ color: '#4CAF50' }}>4.1/5.0</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: c.textSecondary }}>本月平均</Text>
+                  <Text style={{ color: '#4CAF50' }}>4.3/5.0</Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );

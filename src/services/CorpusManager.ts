@@ -182,6 +182,17 @@ class CorpusManager {
     return this.stats!;
   }
 
+  // 获取所有语料
+  getAllItems(): CorpusItem[] {
+    const allItems: CorpusItem[] = [];
+    for (const subcats of Object.values(this.corpus)) {
+      for (const items of Object.values(subcats)) {
+        allItems.push(...items);
+      }
+    }
+    return allItems;
+  }
+
   // 获取低性能语料（待优化）
   getLowPerformanceItems(limit: number = 10): CorpusItem[] {
     const lowItems: CorpusItem[] = [];

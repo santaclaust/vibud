@@ -356,7 +356,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
     if (userId) {
       unifiedEmotionService.clearProfile(userId);
     }
-    // 清空对话记忆
+    // 清空对话记忆（同步到云端）
+    chatMemory.syncToCloud(uid).catch(e => console.log('[Confession] 云同步失败:', e));
     chatMemory.clear();
     // 重置评价状态
     setMessageRatings([]);
@@ -650,7 +651,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         }
       }
 
-      // 5. 清空记忆
+      // 5. 清空记忆（同步到云端）
+      chatMemory.syncToCloud(uid).catch(e => console.log('[Confession] 云同步失败:', e));
       chatMemory.clear();
 
       console.log('[Confession] 评价已保存,会话结束', isPositive ? '👍' : '👎');

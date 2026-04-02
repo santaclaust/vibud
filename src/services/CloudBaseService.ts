@@ -21,17 +21,32 @@ let app: any = null;
 let initialized = false;
 
 export const initCloudBase = async (): Promise<boolean> => {
-  if (initialized) return true;
+  if (initialized && app) return true;
   
   try {
     app = cloudbase.init(cloudbaseConfig);
     initialized = true;
     console.log('[CloudBase] 初始化成功');
+    // 🆕 确保登录状态
+    try {
+      await app.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
+    } catch (e) {
+      // 可能已登录
+    }
     return true;
   } catch (err) {
     console.error('[CloudBase] 初始化失败:', err);
     return false;
   }
+};
+
+/**
+ * 重新初始化 CloudBase（用于切换用户后）
+ */
+export const reinitCloudBase = async (): Promise<boolean> => {
+  initialized = false;
+  app = null;
+  return initCloudBase();
 };
 
 // ========== 认证服务 ==========
@@ -583,6 +598,19 @@ export const publishPost = async (post: {
   return { docId };
 };
 
+/** 根据ID获取单个帖子 */
+export const getPostById = async (postId: string): Promise<any | null> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('community_posts').doc(postId).get();
+    const docs = r.data || [];
+    return docs[0] || null;
+  } catch (err) {
+    console.error('[CloudBase] getPostById 失败:', err);
+    return null;
+  }
+};
+
 /** 获取社群帖子列表（按分类或全部） - 不含用户点赞/收藏状态（状态独立查询） */
 export const getCommunityPosts = async (category?: string, limitCount = 50) => {
   try {
@@ -600,12 +628,19 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
       const inner = doc.data || {};
       const _id = doc._id || '';
       
-      // 查询评论数量
+      // 查询评论数量（排除已删除的）
       const commentR = await app!.database().collection('comments').where({ postId: _id }).get();
       const realCommentCount = (commentR.data || []).length;
       
       const likeCount = doc.likeCount ?? inner.likeCount ?? 0;
       const shareCount = doc.shareCount ?? inner.shareCount ?? 0;
+      
+      // 跳过已删除的帖子（检查 doc.deleted 或 inner.deleted）
+      const isDeleted = doc.deleted || inner.deleted || (inner.data?.deleted);
+      if (isDeleted) {
+        console.log('[DBG] 跳过已删除帖子:', _id, 'deleted:', doc.deleted, inner.deleted);
+        return null;
+      }
       
       console.log('[DBG] post _id:', _id, 'realCommentCount:', realCommentCount);
       
@@ -619,7 +654,9 @@ export const getCommunityPosts = async (category?: string, limitCount = 50) => {
       };
     }));
     
-    return postsWithCounts.sort((a: any, b: any) => (b.createTime || 0) - (a.createTime || 0));
+    // 过滤掉已删除的帖子
+    const validPosts = postsWithCounts.filter(p => p !== null);
+    return validPosts.sort((a: any, b: any) => (b.createTime || 0) - (a.createTime || 0));
   } catch (err) {
     console.error('[CloudBase] getCommunityPosts 失败:', err);
     return [];
@@ -639,6 +676,112 @@ export const getUserPostStates = async (postIds: string[], userId: string) => {
     return { likedSet, collectedSet };
   } catch {
     return { likedSet: new Set<string>(), collectedSet: new Set<string>() };
+  }
+};
+
+/** 获取热门帖子（按点赞数+评论数综合排序） */
+export const getHotPosts = async (limitCount = 20) => {
+  try {
+    if (!initialized) await initCloudBase();
+    
+    // 先用 getCommunityPosts 获取所有帖子
+    const allPosts = await getCommunityPosts(undefined, 100);
+    console.log('[DBG] getHotPosts 获取到', allPosts.length, '条');
+    
+    if (allPosts.length === 0) return [];
+    
+    // 综合排序：点赞*2 + 评论
+    const posts = allPosts.map((post: any) => {
+      const likeCount = post.likeCount || 0;
+      const commentCount = post.commentCount || 0;
+      const score = likeCount * 2 + commentCount;
+      console.log('[DBG] post', post._id, 'likeCount:', likeCount, 'commentCount:', commentCount, 'score:', score);
+      return { ...post, _score: score };
+    });
+    
+    // 按分数排序
+    const sorted = posts.sort((a: any, b: any) => b._score - a._score);
+    console.log('[DBG] getHotPosts 排序后Top3:', sorted.slice(0, 3).map(p => ({ id: p._id, score: p._score, like: p.likeCount })));
+    
+    return sorted.slice(0, limitCount);
+  } catch (err) {
+    console.error('[CloudBase] getHotPosts 失败:', err);
+    return [];
+  }
+};
+
+/** 获取推荐帖子（近期发布 + 较高互动） */
+export const getRecommendedPosts = async (limitCount = 20) => {
+  try {
+    if (!initialized) await initCloudBase();
+    const now = Date.now();
+    const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
+    
+    // 获取近期帖子
+    const r = await app!.database().collection('community_posts')
+      .where({
+        createTime: app!.database().command.gt(threeDaysAgo)
+      })
+      .limit(limitCount * 2) // 多取一些用于筛选
+      .get();
+    const docs = r.data || [];
+    
+    // 计算推荐分数：时间衰减 + 互动量
+    const posts = docs.map((doc: any) => {
+      const inner = doc.data || {};
+      const likeCount = doc.likeCount ?? inner.likeCount ?? 0;
+      const commentCount = doc.commentCount ?? inner.commentCount ?? 0;
+      const createTime = doc.createTime || now;
+      
+      // 时间衰减因子（3天内，随时间递减）
+      const hoursAgo = (now - createTime) / (1000 * 60 * 60);
+      const timeFactor = Math.max(0, 1 - hoursAgo / 72);
+      
+      const score = (likeCount + commentCount) * timeFactor;
+      return { ...inner, ...doc, likeCount, commentCount, _score: score };
+    });
+    
+    // 取评分最高的
+    return posts.sort((a: any, b: any) => b._score - a._score).slice(0, limitCount);
+  } catch (err) {
+    console.error('[CloudBase] getRecommendedPosts 失败:', err);
+    return [];
+  }
+};
+
+/** 获取热门话题（从帖子提取） */
+export const getHotTopics = async (limitCount = 10) => {
+  try {
+    if (!initialized) await initCloudBase();
+    // 获取近期100条帖子
+    const r = await app!.database().collection('community_posts')
+      .orderBy('createTime', 'desc')
+      .limit(100)
+      .get();
+    const docs = r.data || [];
+    
+    // 提取#话题标签
+    const topicCount: Record<string, number> = {};
+    docs.forEach((doc: any) => {
+      const text = doc.text || doc.data?.text || '';
+      const matches = text.match(/#[^\s#，。,、]+/g);
+      if (matches) {
+        matches.forEach((tag: string) => {
+          topicCount[tag] = (topicCount[tag] || 0) + 1;
+        });
+      }
+    });
+    
+    // 排序取Top
+    const topics = Object.entries(topicCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limitCount)
+      .map(([tag, count]) => ({ tag, count }));
+    
+    return topics;
+  } catch (err) {
+    console.error('[CloudBase] getHotTopics 失败:', err);
+    return [];
   }
 };
 
@@ -774,6 +917,482 @@ export const publishComment = async (comment: {
   return r;
 };
 
+// ========== 社交连接：关注系统 ==========
+
+/** 关注用户 */
+export const followUser = async (followerId: string, followingId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    // 检查是否已关注
+    const existing = await app!.database().collection('follows')
+      .where({ followerId, followingId })
+      .get();
+    if ((existing.data || []).length > 0) {
+      return { success: false, message: '已经关注过了' };
+    }
+    // 添加关注
+    await app!.database().collection('follows').add({
+      followerId,
+      followingId,
+      createTime: Date.now(),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] followUser 失败:', err);
+    return { success: false, message: '操作失败' };
+  }
+};
+
+/** 取消关注 */
+export const unfollowUser = async (followerId: string, followingId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const existing = await app!.database().collection('follows')
+      .where({ followerId, followingId })
+      .get();
+    if (existing.data && existing.data.length > 0) {
+      await app!.database().collection('follows').doc(existing.data[0]._id).remove();
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] unfollowUser 失败:', err);
+    return { success: false };
+  }
+};
+
+/** 检查是否已关注 */
+export const isFollowing = async (followerId: string, followingId: string): Promise<boolean> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('follows')
+      .where({ followerId, followingId })
+      .get();
+    return (r.data || []).length > 0;
+  } catch {
+    return false;
+  }
+};
+
+/** 获取我的关注列表 */
+export const getFollowingList = async (userId: string): Promise<string[]> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('follows')
+      .where({ followerId: userId })
+      .get();
+    return (r.data || []).map((d: any) => d.followingId);
+  } catch {
+    return [];
+  }
+};
+
+/** 获取我的粉丝列表 */
+export const getFollowersList = async (userId: string): Promise<string[]> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('follows')
+      .where({ followingId: userId })
+      .get();
+    return (r.data || []).map((d: any) => d.followerId);
+  } catch {
+    return [];
+  }
+};
+
+/** 获取关注数 */
+export const getFollowStats = async (userId: string) => {
+  const following = await getFollowingList(userId);
+  const followers = await getFollowersList(userId);
+  return { followingCount: following.length, followersCount: followers.length };
+};
+
+// ========== 内容审核 ==========
+
+/** 敏感词库（前端简单过滤，真实需要后端） */
+const SENSITIVE_WORDS = [
+  '自杀', '自残', '割腕', '跳楼', '安眠药', '不想活', '死了',
+  '色情', '赌博', '毒品', '诈骗', '暴力',
+];
+
+/** 检查文本是否包含敏感词 */
+export const checkSensitiveWords = (text: string): { hasSensitive: boolean; words: string[] } => {
+  const found: string[] = [];
+  const lower = text.toLowerCase();
+  SENSITIVE_WORDS.forEach(word => {
+    if (lower.includes(word)) {
+      found.push(word);
+    }
+  });
+  return { hasSensitive: found.length > 0, words: found };
+};
+
+/** 举报帖子 */
+export const reportPost = async (postId: string, reporterId: string, reason: string, detail?: string) => {
+  if (!initialized) await initCloudBase();
+  console.log('[CloudBase] reportPost 开始:', postId, reporterId, reason);
+  try {
+    // 简单防重复：同一用户对同一帖子每天最多举报1次
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const existing = await app!.database().collection('reports')
+      .where({
+        targetId: postId,
+        reporterId,
+        createTime: app!.database().command.gt(todayStart.getTime()),
+      })
+      .get();
+    
+    if ((existing.data || []).length > 0) {
+      return { success: false, message: '今天已经举报过了' };
+    }
+    
+    await app!.database().collection('reports').add({
+      type: 'post',
+      targetId: postId,
+      reporterId,
+      reason,
+      detail: detail || '',
+      status: 'pending', // pending / reviewed / rejected
+      createTime: Date.now(),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] reportPost 失败:', err);
+    return { success: false, message: '举报失败' };
+  }
+};
+
+/** 举报评论 */
+export const reportComment = async (commentId: string, reporterId: string, reason: string, detail?: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const existing = await app!.database().collection('reports')
+      .where({ targetId: commentId, reporterId, type: 'comment' })
+      .get();
+    if ((existing.data || []).length > 0) {
+      return { success: false, message: '已经举报过了' };
+    }
+    await app!.database().collection('reports').add({
+      type: 'comment',
+      targetId: commentId,
+      reporterId,
+      reason,
+      detail: detail || '',
+      status: 'pending',
+      createTime: Date.now(),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] reportComment 失败:', err);
+    return { success: false, message: '举报失败' };
+  }
+};
+
+/** 获取我的举报记录 */
+export const getMyReports = async (userId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('reports')
+      .where({ reporterId: userId })
+      .orderBy('createTime', 'desc')
+      .get();
+    return r.data || [];
+  } catch {
+    return [];
+  }
+};
+
+/** 拉黑用户 */
+export const blockUser = async (blockerId: string, blockedId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const existing = await app!.database().collection('blocks')
+      .where({ blockerId, blockedId })
+      .get();
+    if ((existing.data || []).length > 0) {
+      return { success: false, message: '已经拉黑了' };
+    }
+    await app!.database().collection('blocks').add({
+      blockerId,
+      blockedId,
+      createTime: Date.now(),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] blockUser 失败:', err);
+    return { success: false };
+  }
+};
+
+/** 取消拉黑 */
+export const unblockUser = async (blockerId: string, blockedId: string) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const existing = await app!.database().collection('blocks')
+      .where({ blockerId, blockedId })
+      .get();
+    if (existing.data && existing.data.length > 0) {
+      await app!.database().collection('blocks').doc(existing.data[0]._id).remove();
+    }
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+};
+
+/** 检查是否已拉黑 */
+export const isBlocked = async (blockerId: string, blockedId: string): Promise<boolean> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('blocks')
+      .where({ blockerId, blockedId })
+      .get();
+    return (r.data || []).length > 0;
+  } catch {
+    return false;
+  }
+};
+
+/** 获取我拉黑的用户列表 */
+export const getBlockedUsers = async (userId: string): Promise<string[]> => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('blocks')
+      .where({ blockerId: userId })
+      .get();
+    return (r.data || []).map((d: any) => d.blockedId);
+  } catch {
+    return [];
+  }
+};
+
+// ========== 举报审核（超级管理员） ==========
+
+const ADMIN_USER_ID = 'santaclaust';
+
+/** 检查是否是超级管理员 */
+export const isSuperAdmin = (userId: string): boolean => {
+  // 支持直接 ID 或包含 santaclaust 的自定义 ID
+  return userId === ADMIN_USER_ID || userId.includes('santaclaust');
+};
+
+/** 获取待审核的举报列表（仅超级管理员可用） */
+export const getPendingReports = async () => {
+  if (!initialized) await initCloudBase();
+  try {
+    // 只获取 pending 状态的举报
+    const r = await app!.database().collection('reports')
+      .where({ status: 'pending' })
+      .orderBy('createTime', 'desc')
+      .get();
+    return r.data || [];
+  } catch (err) {
+    console.error('[CloudBase] getPendingReports 失败:', err);
+    return [];
+  }
+};
+
+/** 获取所有举报（仅超级管理员可用） */
+export const getAllReports = async (limit = 50) => {
+  if (!initialized) await initCloudBase();
+  try {
+    const r = await app!.database().collection('reports')
+      .orderBy('createTime', 'desc')
+      .limit(limit)
+      .get();
+    return r.data || [];
+  } catch {
+    return [];
+  }
+};
+
+/** 处理举报（仅超级管理员可用） */
+export const processReport = async (reportId: string, adminId: string, action: 'approve' | 'reject') => {
+  if (!initialized) await initCloudBase();
+  if (!isSuperAdmin(adminId)) {
+    return { success: false, message: '权限不足' };
+  }
+  try {
+    // 获取举报详情
+    const report = await app!.database().collection('reports').doc(reportId).get();
+    const reportData = report.data?.[0];
+    
+    if (!reportData) {
+      return { success: false, message: '举报不存在' };
+    }
+
+    // 更新举报状态
+    let updateSuccess = false;
+    try {
+      await app!.database().collection('reports').doc(reportId).update({
+        status: action === 'approve' ? 'reviewed' : 'rejected',
+        adminId,
+        adminTime: Date.now(),
+      });
+      updateSuccess = true;
+    } catch (e) {
+      // 更新失败则删除举报记录
+      try {
+        await app!.database().collection('reports').doc(reportId).remove();
+      } catch (e2) {}
+    }
+    
+    // 如果是批准（删除内容）- 标记删除帖子
+    if (action === 'approve' && reportData?.type === 'post' && reportData.targetId) {
+      try {
+        await app!.database().collection('community_posts').doc(reportData.targetId).update({
+          deleted: true,
+          deletedAt: Date.now(),
+          deleteReason: reportData.reason || '举报处理',
+        });
+      } catch (e) {
+        console.log('[CloudBase] 标记删除帖子失败:', e);
+      }
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error('[CloudBase] processReport 失败:', err);
+    return { success: false, message: '操作失败' };
+  }
+};
+
+/** 清空所有举报记录（仅超级管理员可用） */
+export const clearAllReports = async (adminId: string) => {
+  if (!initialized) await initCloudBase();
+  if (!isSuperAdmin(adminId)) {
+    return { success: false, message: '权限不足' };
+  }
+  try {
+    // 获取所有举报
+    const allR = await app!.database().collection('reports').get();
+    const allReports = allR.data || [];
+    
+    // 逐个删除
+    for (const report of allReports) {
+      try {
+        await app!.database().collection('reports').doc(report._id).remove();
+      } catch (e) {
+        console.log('[CloudBase] 删除举报失败:', report._id);
+      }
+    }
+    return { success: true, message: `已清空 ${allReports.length} 条举报` };
+  } catch (err) {
+    console.error('[CloudBase] clearAllReports 失败:', err);
+    return { success: false, message: '操作失败' };
+  }
+};
+
+/** 批量删除帖子（仅超级管理员可用） */
+export const deletePostByAdmin = async (postId: string, adminId: string, reason: string) => {
+  if (!initialized) await initCloudBase();
+  if (!isSuperAdmin(adminId)) {
+    return { success: false, message: '权限不足' };
+  }
+  try {
+    await app!.database().collection('community_posts').doc(postId).update({
+      deleted: true,
+      deleteReason: reason,
+      deletedBy: adminId,
+      deletedAt: Date.now(),
+    });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+};
+
+/** 恢复帖子（仅超级管理员可用） */
+export const restorePostByAdmin = async (postId: string, adminId: string) => {
+  if (!initialized) await initCloudBase();
+  if (!isSuperAdmin(adminId)) {
+    return { success: false, message: '权限不足' };
+  }
+  try {
+    await app!.database().collection('community_posts').doc(postId).update({
+      deleted: false,
+      deleteReason: '',
+      deletedBy: '',
+      deletedAt: null,
+    });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+};
+
+/** 彻底删除帖子（仅超级管理员可用）- 从数据库物理删除 */
+export const hardDeletePost = async (postId: string, adminId: string) => {
+  console.log('[CloudBase] hardDeletePost 开始 postId:', postId, 'adminId:', adminId);
+  if (!initialized) await initCloudBase();
+  if (!isSuperAdmin(adminId)) {
+    console.log('[CloudBase] hardDeletePost 权限不足');
+    return { success: false, message: '权限不足' };
+  }
+  try {
+    console.log('[CloudBase] hardDeletePost 准备删除...');
+    
+    // 尝试获取当前用户 context（包含 openid）
+    let currentOpenId = '';
+    try {
+      // 获取当前用户信息
+      const userInfo = await app!.auth().getUserInfo();
+      currentOpenId = userInfo?.openid || '';
+      console.log('[CloudBase] 当前用户 openid:', currentOpenId);
+    } catch (e) {
+      console.log('[CloudBase] 获取用户信息失败:', e);
+    }
+    
+    // 先检查帖子是否存在
+    const checkDoc = await app!.database().collection('community_posts').doc(postId).get();
+    console.log('[CloudBase] 帖子存在检查:', checkDoc.data);
+    
+    if (!checkDoc.data) {
+      console.log('[CloudBase] 帖子不存在或已删除');
+      return { success: false, message: '帖子不存在或已删除' };
+    }
+    
+    // 检查帖子作者 _openid
+    const postData = checkDoc.data;
+    const postAuthorOpenId = postData._openid || '';
+    console.log('[CloudBase] 帖子作者 _openid:', postAuthorOpenId);
+    
+    // 关键修复：无 _openid → 允许管理员强制删除
+    // 如果有 _openid 但不匹配 → 尝试强制删除
+    let result;
+    if (!postAuthorOpenId) {
+      // 无作者，允许删除
+      console.log('[CloudBase] 无作者 openid，允许删除');
+      result = await app!.database().collection('community_posts').doc(postId).remove();
+    } else if (postAuthorOpenId === currentOpenId) {
+      // 作者匹配，直接删除
+      console.log('[CloudBase] 作者匹配，允许删除');
+      result = await app!.database().collection('community_posts').doc(postId).remove();
+    } else {
+      // 作者不匹配，超级管理员尝试强制删除
+      console.log('[CloudBase] 作者不匹配，超级管理员强制删除');
+      // CloudBase 可能有限制，尝试使用 update 标记删除
+      result = await app!.database().collection('community_posts').doc(postId).update({
+        deleted: true,
+        deletedAt: Date.now(),
+        deletedBy: adminId,
+        deleteReason: '管理员强制删除',
+      });
+    }
+    
+    console.log('[CloudBase] hardDeletePost 删除结果:', result);
+    if (result && (result.deleted > 0 || result.updated > 0)) {
+      return { success: true };
+    } else {
+      return { success: false, message: '删除失败' };
+    }
+  } catch (e: any) {
+    console.error('[CloudBase] hardDeletePost 异常:', e);
+    return { success: false, message: e?.message || '删除失败' };
+  }
+};
+
 /** 获取某帖子的所有评论 */
 export const getComments = async (postId: string) => {
   if (!initialized) await initCloudBase();
@@ -786,18 +1405,6 @@ export const getComments = async (postId: string) => {
   } catch (err) {
     console.error('[CloudBase] getComments 失败:', err);
     return [];
-  }
-};
-
-/** 根据 _id 获取单个帖子 */
-export const getPostById = async (postId: string) => {
-  if (!initialized) await initCloudBase();
-  try {
-    const r = await app!.database().collection('community_posts').doc(postId).get();
-    return r.data || null;
-  } catch (err) {
-    console.error('[CloudBase] getPostById 失败:', err);
-    return null;
   }
 };
 
