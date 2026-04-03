@@ -5,6 +5,7 @@ import { unifiedEmotionService } from '../services/UnifiedEmotionService';
 import { storageService } from '../services/StorageService';
 import { chatMemory } from '../services/ChatMemoryManager';
 import { feedbackService } from '../services/FeedbackService';
+import { analyticsService, trackProfileCompletion, trackAIResponseQuality } from '../services/AnalyticsService';
 import { buildFinalPrompt } from '../utils/PromptBuilder';
 import { UserProfile } from '../types';
 import { saveEmotionLog, extractEmotionKeywords, getRecentEmotionLogs, saveConversationRating, addDocument, getUserEmotionProfile, createUserEmotionProfile, updateUserEmotionProfile } from '../services/CloudBaseService';
@@ -144,6 +145,8 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
         console.log('[Confession] 创建新用户画像:', uid);
       } else {
         console.log('[Confession] 加载用户画像:', uid, profile.emotionProfile?.dominantEmotions);
+        // 🆕 画像填充率跟踪
+        trackProfileCompletion(uid, profile as UserProfile);
       }
     } catch (e) {
       console.log('[Confession] 用户画像初始化失败:', e);
@@ -447,6 +450,11 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
             console.log('[Feedback] 用户风格已更新:', analysis.preferPhrases, analysis.avoidPhrases);
           }
         }
+
+        // 🆕 AI回复质量跟踪（每5条评价上报一次）
+        if (allFeedbacks.length % 5 === 0) {
+          trackAIResponseQuality(uid, sessionId);
+        }
       }
 
       console.log('[Rating] 已评价:', messageId, isPositive ? '👍' : '👎');
@@ -646,6 +654,9 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
           if (userStyle) {
             await feedbackService.syncStyleToCloud(userStyle, uid);
           }
+
+          // 🆕 提交会话结束时上报AI质量
+          trackAIResponseQuality(uid, sessionId);
         } catch (e) {
           console.log('[Confession] 用户画像同步失败:', e);
         }

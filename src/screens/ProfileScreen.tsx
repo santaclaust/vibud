@@ -2,6 +2,7 @@
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Modal, ActivityIndicator, StyleSheet as RNSS, Alert, FlatList, TextInput } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { getEmotionLogs, getCommunityPosts, toggleCollect, getFavoritePosts, batchUncollect, getComments, getPendingReports, processReport, isSuperAdmin, deletePostByAdmin, hardDeletePost, getPostById } from '../services/CloudBaseService';
+import { analyticsService, getMonitoringDashboard } from '../services/AnalyticsService';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -132,11 +133,28 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
     else if (itemId === 'favorites') { openFavorites(); }
     else if (itemId === 'reports') { openReports(); }
     else if (itemId === 'switchUser') { setShowSwitchUser(true); }
-    else if (itemId === 'adminStats') { setShowAdminStats(true); }
+    else if (itemId === 'adminStats') { loadAnalytics(); }
+  };
+
+  // 加载AI效能数据
+  const loadAnalytics = async () => {
+    setShowAdminStats(true);
+    setLoadingAnalytics(true);
+    try {
+      const uid = userId || 'guest';
+      const data = await getMonitoringDashboard(uid);
+      setAnalyticsData(data);
+    } catch (err) {
+      console.error('加载AI效能数据失败:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
   };
 
   // AI效能监控弹窗状态
   const [showAdminStats, setShowAdminStats] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   const handleSwitchUser = () => {
     if (!switchUsername.trim()) {
@@ -573,67 +591,149 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
           </View>
 
           <ScrollView contentContainerStyle={{ padding: 16 }}>
-            <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>AI回复质量评分</Text>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: '#4CAF50', fontSize: 28, fontWeight: 'bold' }}>4.2</Text>
-                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>综合评分</Text>
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: '#2196F3', fontSize: 28, fontWeight: 'bold' }}>87%</Text>
-                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>达标率</Text>
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: '#FF9800', fontSize: 28, fontWeight: 'bold' }}>1.2s</Text>
-                  <Text style={{ color: c.textSecondary, fontSize: 12 }}>平均响应</Text>
-                </View>
+            {loadingAnalytics ? (
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <ActivityIndicator size="large" color={c.primary} />
+                <Text style={{ color: c.textSecondary, marginTop: 12 }}>加载中...</Text>
               </View>
-            </View>
+            ) : analyticsData ? (
+              <>
+                {/* AI回复质量 */}
+                <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                  <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>📊 AI回复质量</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#4CAF50', fontSize: 28, fontWeight: 'bold' }}>{analyticsData.avgRating.toFixed(1)}</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>综合评分</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#2196F3', fontSize: 28, fontWeight: 'bold' }}>{analyticsData.aiPositiveRate}%</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>好评率</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#FF9800', fontSize: 28, fontWeight: 'bold' }}>{analyticsData.totalFeedbacks}</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>反馈总数</Text>
+                    </View>
+                  </View>
+                </View>
 
-            <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>语料库使用统计</Text>
-              <View style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>总语料数</Text>
-                  <Text style={{ color: c.text }}>1280 条</Text>
+                {/* 画像填充率 */}
+                <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                  <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>👤 画像填充率</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 }}>
+                    <View style={{ flex: 1, height: 8, backgroundColor: c.border, borderRadius: 4, overflow: 'hidden' }}>
+                      <View style={{ width: `${analyticsData.profileCompletion}%`, height: '100%', backgroundColor: '#4CAF50', borderRadius: 4 }} />
+                    </View>
+                    <Text style={{ color: c.text, fontSize: 18, fontWeight: '600', marginLeft: 12 }}>{analyticsData.profileCompletion}%</Text>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>本月调用</Text>
-                  <Text style={{ color: c.text }}>342 次</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>高分语料</Text>
-                  <Text style={{ color: '#4CAF50' }}>856 条</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: c.textSecondary }}>待优化语料</Text>
-                  <Text style={{ color: '#FF4444' }}>45 条</Text>
-                </View>
-              </View>
-            </View>
 
-            <View style={{ backgroundColor: c.surface, padding: 16, borderRadius: 12 }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>用户满意度趋势</Text>
-              <View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>今日满意</Text>
-                  <Text style={{ color: c.text }}>23 人</Text>
+                {/* 对话统计 */}
+                <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                  <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>💬 对话统计</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#9C27B0', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.totalRounds}</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>对话轮次</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#00BCD4', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.trends.profileTrend.length}</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>画像记录</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#FF5722', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.trends.qualityTrend.length}</Text>
+                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>质量批次</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>今日不满意</Text>
-                  <Text style={{ color: c.text }}>3 人</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ color: c.textSecondary }}>本周平均</Text>
-                  <Text style={{ color: '#4CAF50' }}>4.1/5.0</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: c.textSecondary }}>本月平均</Text>
-                  <Text style={{ color: '#4CAF50' }}>4.3/5.0</Text>
-                </View>
+
+                {/* 🆕 社区运营数据 */}
+                {analyticsData.community && (
+                  <>
+                    {/* 帖子统计 */}
+                    <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                      <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>📝 帖子情况</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#2196F3', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.posts.total}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>总帖子</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#4CAF50', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.posts.today}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>今日新增</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#FF9800', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.posts.hot}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>热门帖子</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#9C27B0', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.posts.recommend}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>推荐帖子</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 互动统计 */}
+                    <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                      <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>❤️ 点赞/收藏/评论</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#E91E63', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.interactions.totalWarmths}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>暖心总数</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#FF9800', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.interactions.totalCollects}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>收藏总数</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#2196F3', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.interactions.totalComments}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>评论总数</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 举报统计 */}
+                    <View style={{ backgroundColor: c.surface, padding: 16, marginBottom: 16, borderRadius: 12 }}>
+                      <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>🚩 举报情况</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#FF5722', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.reports.pending}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>待处理</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#4CAF50', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.reports.processed}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>已处理</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#9E9E9E', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.reports.rejected}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>已驳回</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 树洞统计 */}
+                    <View style={{ backgroundColor: c.surface, padding: 16, borderRadius: 12 }}>
+                      <Text style={{ color: c.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>🌲 树洞情况</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#795548', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.treehole.total}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>总数量</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#4CAF50', fontSize: 24, fontWeight: 'bold' }}>{analyticsData.community.treehole.today}</Text>
+                          <Text style={{ color: c.textSecondary, fontSize: 12 }}>今日新增</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : (
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <Text style={{ color: c.textSecondary }}>暂无数据</Text>
+                <Text style={{ color: c.textSecondary, fontSize: 12, marginTop: 8 }}>开始对话后将自动收集数据</Text>
               </View>
-            </View>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
