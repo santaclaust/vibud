@@ -354,9 +354,6 @@ export default function HomeScreen({ navigation, menuVisible, colors: propsColor
         ) : bgImage ? (
           <View style={styles.imageContainer}>
             <Image source={{ uri: bgImage }} style={styles.backgroundImage} resizeMode="cover" />
-            <View style={styles.sourceTag}>
-              <Text style={styles.sourceTagText}>{getSourceDisplayName(imageSource)}</Text>
-            </View>
             {/* 长按提示 */}
             {isLongPressing && (
               <View style={styles.longPressHint}>
