@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 对话记忆管理器
  * 管理用户对话上下文、本地持久化、历史蒸馏
  */
@@ -8,18 +8,21 @@ import { UserProfile, Message, toAIContext } from '../types/UserProfile';
 import { generateProfileFromChat, mergeProfile, inferChatStyle, inferPersonality } from '../utils/ProfileParser';
 import { addDocument, queryDocuments, updateDocument, initCloudBase } from './CloudBaseService';
 
-const SESSION_KEY = 'CHAT_SESSION';
-const PROFILE_KEY = 'USER_PROFILE';
-const MAX_RECENT = 10; // 最近10轮原文
+const MAX_RECENT = 10;
+
+// 获取带用户ID的存储键
+const getSessionKey = (userId: string) => `CHAT_SESSION_${userId}`;
+const getProfileKey = (userId: string) => `USER_PROFILE_${userId}`;
 
 // 内存中的会话数据
 interface ChatMemoryData {
   sessionId: string;
-  summary: string;  // 久远对话蒸馏摘要
-  recentMessages: Message[];  // 最近10轮原文
+  summary: string;
+  recentMessages: Message[];
 }
 
 export class ChatMemoryManager {
+  private userId: string = 'guest';
   private memory: ChatMemoryData;
   private profile: UserProfile | null = null;
 
@@ -31,27 +34,38 @@ export class ChatMemoryManager {
     };
   }
 
+  // 设置用户ID
+  setUserId(uid: string) {
+    this.userId = uid;
+  }
+
+  getUserId(): string {
+    return this.userId;
+  }
+
   // 初始化：加载本地持久化数据
-  async init() {
+  async init(uid?: string) {
+    if (uid) this.userId = uid;
+    
     try {
-      // 加载会话记忆
-      const savedSession = await AsyncStorage.getItem(SESSION_KEY);
+      const sessionKey = getSessionKey(this.userId);
+      const profileKey = getProfileKey(this.userId);
+      
+      const savedSession = await AsyncStorage.getItem(sessionKey);
       if (savedSession) {
         this.memory = JSON.parse(savedSession);
       }
       
-      // 加载用户画像
-      const savedProfile = await AsyncStorage.getItem(PROFILE_KEY);
+      const savedProfile = await AsyncStorage.getItem(profileKey);
       if (savedProfile) {
         const parsed = JSON.parse(savedProfile);
-        // 确保数组字段是数组
         const ensureArray = (val: any): string[] => {
           if (Array.isArray(val)) return val;
           if (val && typeof val === 'string') return [val];
           return [];
         };
         this.profile = {
-          userId: parsed.userId || 'guest',
+          userId: parsed.userId || this.userId,
           people: ensureArray(parsed.people),
           events: ensureArray(parsed.events),
           time: parsed.time || '',
@@ -72,7 +86,6 @@ export class ChatMemoryManager {
   async addMessage(role: 'user' | 'assistant', content: string) {
     this.memory.recentMessages.push({ role, content, timestamp: Date.now() });
 
-    // 超过10条 → 自动蒸馏最旧的消息
     if (this.memory.recentMessages.length > MAX_RECENT) {
       const oldest = this.memory.recentMessages.shift();
       if (oldest && oldest.role === 'user') {
@@ -83,30 +96,25 @@ export class ChatMemoryManager {
     await this.save();
   }
 
-  // 蒸馏旧消息 → 生成摘要
+  // 蒸馏旧消息
   async distillOldMessage(msg: { role: string; content: string }) {
     const content = msg.content;
     
-    // 情绪关键词
     const emotionWords = ['难过', '委屈', '生气', '焦虑', '疲惫', '绝望', '无奈', '心累', '失眠', '压力', '迷茫'];
     const foundEmotions = emotionWords.filter(w => content.includes(w));
 
-    // 话题关键词
     const topicWords = ['工作', '学习', '家庭', '感情', '人际', '健康', '未来', '事业'];
     const foundTopics = topicWords.filter(w => content.includes(w));
 
-    // 构建蒸馏信息
     const parts: string[] = [];
     if (foundEmotions.length > 0) parts.push(`情绪:${foundEmotions.join('/')}`);
     if (foundTopics.length > 0) parts.push(`话题:${foundTopics.join('/')}`);
 
-    const keyInfo = parts.length > 0 ? parts.join('；') : '持续倾诉中';
+    const keyInfo = parts.length > 0 ? parts.join('；') : '持续倾��中';
 
-    // 合并到总摘要
     this.memory.summary += `\n${keyInfo}`;
     this.memory.summary = this.memory.summary.trim();
     
-    // 更新画像
     await this.updateProfileFromChat();
   }
 
@@ -114,7 +122,7 @@ export class ChatMemoryManager {
   async updateProfileFromChat() {
     if (!this.profile) {
       this.profile = {
-        userId: 'guest',
+        userId: this.userId,
         people: [],
         events: [],
         time: '',
@@ -127,17 +135,11 @@ export class ChatMemoryManager {
       };
     }
     
-    // 从最近对话中提取四要素
     const extracted = this.extractFromMessages(this.memory.recentMessages);
-    
-    // 合并到现有画像
     this.profile = mergeProfile(this.profile, extracted);
-    
-    // 保存画像
     await this.saveProfile();
   }
 
-  // 从消息中提取四要素
   private extractFromMessages(messages: Message[]): Partial<UserProfile> {
     const userMsgs = messages.filter(m => m.role === 'user').map(m => m.content);
     
@@ -161,22 +163,19 @@ export class ChatMemoryManager {
     };
   }
 
-  // 手动设置用户画像
   async setProfile(profile: UserProfile) {
     this.profile = profile;
+    this.userId = profile.userId || this.userId;
     await this.saveProfile();
   }
 
-  // 获取用户画像（本地）
   getProfile(): UserProfile | null {
     return this.profile;
   }
 
-  // 获取用户画像（带JSON结构，用于云端同步）
   getProfileForSync(): Partial<UserProfile> | null {
     if (!this.profile) return null;
     
-    // 确保所有数组字段都是数组
     const ensureArray = (val: any): string[] => {
       if (Array.isArray(val)) return val;
       if (val && typeof val === 'string') return [val];
@@ -197,15 +196,12 @@ export class ChatMemoryManager {
     };
   }
 
-  // 获取 AI 上下文格式的画像摘要
   getProfileForAI(): string {
     if (!this.profile) return '';
     return toAIContext(this.profile);
   }
 
-  // 打包发送给云函数的结构
   getUploadPackage() {
-    // 最近10轮原文
     const history: Array<{ role: string; content: string }> = this.memory.recentMessages.map(m => ({
       role: m.role,
       content: m.content.slice(0, 200)
@@ -215,67 +211,60 @@ export class ChatMemoryManager {
       sessionId: this.memory.sessionId,
       summary: this.memory.summary,
       recentMessages: history,
-      profile: this.profile ? toAIContext(this.profile) : '', // AI可读的画像
+      profile: this.profile ? toAIContext(this.profile) : '',
     };
   }
 
-  // 持久化保存会话
   private async save() {
     try {
-      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(this.memory));
+      const key = getSessionKey(this.userId);
+      await AsyncStorage.setItem(key, JSON.stringify(this.memory));
     } catch (e) {
       console.log('[Memory] 会话保存失败:', e);
     }
   }
 
-  // 持久化保存画像
   private async saveProfile() {
     try {
       if (this.profile) {
-        await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(this.profile));
+        const key = getProfileKey(this.userId);
+        await AsyncStorage.setItem(key, JSON.stringify(this.profile));
       }
     } catch (e) {
       console.log('[Memory] 画像保存失败:', e);
     }
   }
 
-  // 清空会话（保留画像）
   async clearSession() {
     this.memory = {
       sessionId: `sess_${Date.now()}`,
-      summary: this.memory.summary, // 保留蒸馏摘要
+      summary: this.memory.summary,
       recentMessages: [],
     };
     await this.save();
   }
-
-  // ========== CloudBase 云端同步 ==========
   
-  // 同步到云端
-  async syncToCloud(userId: string): Promise<boolean> {
+  async syncToCloud(userId?: string): Promise<boolean> {
+    const uid = userId || this.userId;
     try {
       await initCloudBase();
-      
       const uploadPkg = this.getUploadPackage();
       
-      // 查询是否存在
-      const existing = await queryDocuments('user_profiles', { userId }, undefined, 1);
+      const existing = await queryDocuments('user_profiles', { userId: uid }, undefined, 1);
       
       if (existing.data && existing.data.length > 0) {
-        // 更新
         await updateDocument('user_profiles', existing.data[0]._id, {
           ...uploadPkg.profile,
           summary: uploadPkg.summary,
           lastSyncAt: Date.now(),
-          userId,
+          userId: uid,
         });
       } else {
-        // 创建
         await addDocument('user_profiles', {
           ...uploadPkg.profile,
           summary: uploadPkg.summary,
           lastSyncAt: Date.now(),
-          userId,
+          userId: uid,
           createdAt: Date.now(),
         });
       }
@@ -288,25 +277,19 @@ export class ChatMemoryManager {
     }
   }
 
-  // 从云端恢复
-  async restoreFromCloud(userId: string): Promise<boolean> {
+  async restoreFromCloud(userId?: string): Promise<boolean> {
+    const uid = userId || this.userId;
     try {
       await initCloudBase();
-      
-      const existing = await queryDocuments('user_profiles', { userId }, undefined, 1);
+      const existing = await queryDocuments('user_profiles', { userId: uid }, undefined, 1);
       
       if (existing.data && existing.data.length > 0) {
         const cloudProfile = existing.data[0];
         
-        // 恢复画像
         if (cloudProfile.emotionProfile) {
-          this.profile = {
-            ...this.profile,
-            ...cloudProfile,
-          };
+          this.profile = { ...this.profile, ...cloudProfile };
         }
         
-        // 恢复摘要
         if (cloudProfile.summary) {
           this.memory.summary = cloudProfile.summary;
         }
@@ -323,18 +306,19 @@ export class ChatMemoryManager {
     }
   }
 
-  // 清空全部（包括画像）
   async clear() {
+    const sessionKey = getSessionKey(this.userId);
+    const profileKey = getProfileKey(this.userId);
+    
     this.memory = {
       sessionId: `sess_${Date.now()}`,
       summary: '',
       recentMessages: [],
     };
     this.profile = null;
-    await AsyncStorage.removeItem(SESSION_KEY);
-    await AsyncStorage.removeItem(PROFILE_KEY);
+    await AsyncStorage.removeItem(sessionKey);
+    await AsyncStorage.removeItem(profileKey);
   }
 }
 
-// 导出单例
 export const chatMemory = new ChatMemoryManager();

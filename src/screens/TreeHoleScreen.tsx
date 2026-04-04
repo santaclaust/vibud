@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, FlatList, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { storageService, TreeHolePost } from '../services/StorageService';
 
-export default function TreeHoleScreen({ navigation, colors: propsColors, goBack }: any) {
+export default function TreeHoleScreen({ navigation, colors: propsColors, goBack, userId }: any) {
   // 默认主题色
   const defaultColors = { background: '#F5F5F0', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#E8E8E0', primary: '#27AE60', card: '#FFFFFF' };
   const colors = propsColors || defaultColors;
+  
+  // 初始化用户ID
+  useEffect(() => {
+    const uid = userId || 'guest';
+    storageService.setUserId(uid);
+  }, []);
   
   // 动态样式
   const dynamicStyles = {

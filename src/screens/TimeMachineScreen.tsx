@@ -24,9 +24,15 @@ const reminderOptions = [
   { id: '3years', label: '3年后', days: 1095 },
 ];
 
-export default function TimeMachineScreen({ navigation, colors: propsColors, goBack }: any) {
+export default function TimeMachineScreen({ navigation, colors: propsColors, goBack, userId }: any) {
   const defaultColors = { background: '#FFF8F0', surface: '#FFFFFF', text: '#333333', textSecondary: '#666666', border: '#F0E8E0', primary: '#E67E22', card: '#FFFFFF' };
   const colors = propsColors || defaultColors;
+  
+  // 初始化用户ID
+  useEffect(() => {
+    const uid = userId || 'guest';
+    storageService.setUserId(uid);
+  }, []);
 
   const s = {
     container: { flex: 1, backgroundColor: colors.background },

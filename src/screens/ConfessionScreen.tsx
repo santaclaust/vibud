@@ -127,10 +127,15 @@ export default function ConfessionScreen({ navigation, colors: propsColors, goBa
 
   // 加载草稿(仅首次加载)
   useEffect(() => {
+    const uid = userId || 'guest';
+    // 设置用户ID到存储服务
+    storageService.setUserId(uid);
+    chatMemory.setUserId(uid);
+    chatMemory.init(uid).then(() => {
+      // 加载历史记录
+      storageService.getChatHistoryList().then(list => setChatHistoryList(list));
+    });
     loadDraft().then(() => setIsDraftLoaded(true));
-    chatMemory.init();
-    // 加载历史记录
-    storageService.getChatHistoryList().then(list => setChatHistoryList(list));
     // 初始化用户画像
     initUserProfile();
   }, []);

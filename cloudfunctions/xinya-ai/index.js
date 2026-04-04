@@ -1,108 +1,128 @@
-/**
- * 云函数：调用 AI 对话
- * 
- * 环境变量配置：
- * - SILICON_API_KEY: 你的硅基流动 API Key
- * - SILICON_MODEL: 模型名称（默认 Qwen/Qwen2.5-7B-Instruct）
- *   可选: Qwen/Qwen2.5-7B-Instruct, Qwen/Qwen2.5-14B-Instruct, 
- *         minimax-cn/MiniMax-M2.5, etc.
- */
-
-const axios = require('axios');
-
-exports.main = async (context) => {
-  // HTTP 访问服务：参数在 event.body 中
-  // 云函数调用：参数在 context.data 中
-  let userMessage, mode, historyContext;
-  
-  if (context.data) {
-    // 云函数调用方式
-    ({ userMessage, mode = 'heal', context: historyContext = '' } = context.data || {});
-  } else if (context.event && context.event.body) {
-    // HTTP 访问服务方式
-    const body = typeof context.event.body === 'string' 
-      ? JSON.parse(context.event.body) 
-      : context.event.body;
-    ({ userMessage, mode = 'heal', context: historyContext = '' } = body || {});
-  }
-  
-  if (!userMessage) {
-    return { success: false, error: '缺少 userMessage 参数' };
-  }
-  
-  // 从环境变量获取配置
-  const apiKey = process.env.SILICON_API_KEY;
-  const model = process.env.SILICON_MODEL || 'Pro/deepseek-ai/DeepSeek-V3.2';
-  
-  if (!apiKey) {
-    return { success: false, error: '未配置 SILICON_API_KEY 环境变量' };
-  }
-  
-  // 构建系统提示词
-  const systemPrompt = buildSystemPrompt(mode, historyContext);
-  
-  try {
-    const response = await axios.post(
-      'https://api.siliconflow.cn/v1/chat/completions',
-      {
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
+// 心芽AI倾听 · DeepSeek版
+exports.main = async (event, context) => {
+  // CORS 预检
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS',
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        timeout: 30000,
-      }
-    );
+      body: '',
+    };
+  }
+
+  try {
+    // 直接从 event 提取，兼容不同格式
+    const rawBody = event.body || event;
+    let data = {};
     
-    if (response.data?.choices?.[0]?.message?.content) {
+    if (typeof rawBody === 'string') {
+      try { data = JSON.parse(rawBody); } 
+      catch { data = rawBody; }
+    } else {
+      data = rawBody;
+    }
+
+    const { prompt, userMessage, summary = '', recentMessages = [] } = data;
+
+    if (!prompt && !userMessage) {
       return {
-        success: true,
-        text: response.data.choices[0].message.content
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ success: false, error: '缺少 prompt 或 userMessage', got: Object.keys(data) })
       };
     }
+
+    // DeepSeek 环境变量
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+    console.log("API Key 存在:", !!apiKey, "| model:", model);
+
+    if (!apiKey) {
+      return {
+        statusCode: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ success: false, error: '未配置 DEEPSEEK_API_KEY' })
+      };
+    }
+
+    // 构建消息
+    const messages = [];
+    if (prompt) {
+      messages.push({ role: 'system', content: prompt });
+      messages.push({ role: 'user', content: '请回复' });
+    } else {
+      messages.push({
+        role: 'system',
+        content: '你是心芽，温柔真诚的朋友。只倾听、只共情、不给方法、不说教。每次最多2句话。'
+      });
+      if (summary) {
+        messages.push({ role: 'system', content: `【用户过往】\n${summary}` });
+      }
+      if (recentMessages && recentMessages.length > 0) {
+        recentMessages.forEach(msg => {
+          if (msg.role && msg.content) messages.push(msg);
+        });
+      }
+      messages.push({ role: 'user', content: userMessage });
+    }
+
+    console.log("消息数:", messages.length);
+
+    // 调用 DeepSeek API
+    const fetch = (await import('node-fetch')).default;
     
-    return { success: false, error: 'API 响应格式错误' };
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 200,
+      }),
+    });
+
+    const result = await response.json();
+    console.log("DeepSeek 返回:", JSON.stringify(result).slice(0, 500));
+
+    if (result.error) {
+      console.error("DeepSeek 错误:", result.error);
+      return {
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ success: true, text: '我在这里，你可以说说你的心事。' })
+      };
+    }
+
+    const reply = result?.choices?.[0]?.message?.content?.trim() || '';
     
-  } catch (error) {
-    console.error('AI 调用失败:', error.message);
+    if (!reply || reply.length < 5) {
+      return {
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ success: true, text: '我在这里，你可以说说你的心事。' })
+      };
+    }
+
     return {
-      success: false,
-      error: error.response?.data?.message || error.message || '调用失败'
+      statusCode: 200,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ success: true, text: reply })
+    };
+
+  } catch (err) {
+    console.error('云函数报错', err.message || err);
+    return {
+      statusCode: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ success: true, text: '我在这里，你可以说说你的心事。' })
     };
   }
 };
-
-// 构建系统提示词
-function buildSystemPrompt(mode, historyContext) {
-  const modeConfig = mode === 'consult' ? {
-    name: '心理咨询师',
-    style: '专业、引导性强、善于提问'
-  } : {
-    name: '情绪陪伴者',
-    style: '温暖、共情、不评判'
-  };
-
-  let context = '';
-  if (historyContext) {
-    context = `\n\n${historyContext}`;
-  }
-
-  return `你是心芽（XinYa）的 AI 助手，定位是${modeConfig.name}。
-你的风格：${modeConfig.style}
-你的任务是陪伴用户、倾听情绪、帮助用户理清思路。${context}
-
-回复要求：
-1. 真诚、共情，不说空话套话
-2. 长度控制在100-300字之间
-3. 如果用户陷入循环，主动引导换角度
-4. 如果用户回避，温和接纳，给安全感
-5. 永远不要否定用户的感受`;
-}

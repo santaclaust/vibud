@@ -1,14 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 存储键名
-const STORAGE_KEYS = {
-  CONFESSIONS: 'xinya_confessions',      // 倾诉记录
-  TREEHOLE: 'xinya_treehole',            // 树洞记录
-  TIMEMACHINE: 'xinya_timemachine',      // 时光机记录
-  CHAT_HISTORY: 'xinya_chat_history',    // AI对话历史
-  DRAFT_TREEHOLE: 'xinya_draft_treehole',     // 树洞草稿
-  DRAFT_CONFESSION: 'xinya_draft_confession', // 倾诉草稿
-  DRAFT_TIMEMACHINE: 'xinya_draft_timemachine', // 时光机草稿
+// 获取带用户ID的存储键
+const getKey = (base: string, userId: string = 'guest') => `${base}_${userId}`;
+
+// 存储键名（基础部分）
+const BASE_KEYS = {
+  CONFESSIONS: 'xinya_confessions',
+  TREEHOLE: 'xinya_treehole',
+  TIMEMACHINE: 'xinya_timemachine',
+  CHAT_HISTORY: 'xinya_chat_history',
+  DRAFT_TREEHOLE: 'xinya_draft_treehole',
+  DRAFT_CONFESSION: 'xinya_draft_confession',
+  DRAFT_TIMEMACHINE: 'xinya_draft_timemachine',
 };
 
 // 倾诉记录类型
@@ -17,7 +20,8 @@ export interface Confession {
   text: string;
   mode: 'heal' | 'treehole' | 'consult' | 'record' | 'draw';
   timestamp: number;
-  reply?: string;  // AI回复（治愈/咨询模式）
+  reply?: string;
+  userId?: string;
 }
 
 // 树洞记录类型
@@ -26,6 +30,7 @@ export interface TreeHolePost {
   text: string;
   timestamp: number;
   likes: number;
+  userId?: string;
 }
 
 // 时光机记录类型
@@ -35,7 +40,8 @@ export interface TimeMachineEntry {
   mood?: string;
   imageUrl?: string;
   timestamp: number;
-  unlockAt?: number;  // 解锁时间（时间戳），未设置则为undefined
+  unlockAt?: number;
+  userId?: string;
 }
 
 // AI对话消息类型
@@ -46,7 +52,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// 对话历史记录（用于用户回查）
+// 对话历史记录
 export interface ChatHistoryRecord {
   sessionId: string;
   timestamp: number;
@@ -57,10 +63,17 @@ export interface ChatHistoryRecord {
   }>;
   rating: number;
   feedback?: string | null;
+  userId?: string;
 }
 
 // 通用存储服务
 class StorageService {
+  private userId: string = 'guest';
+
+  setUserId(uid: string) {
+    this.userId = uid;
+  }
+
   private async getItem<T>(key: string): Promise<T | null> {
     try {
       const value = await AsyncStorage.getItem(key);
@@ -81,156 +94,158 @@ class StorageService {
     }
   }
 
-  // 生成唯一ID
   generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
   }
 
   // ========== 倾诉相关 ==========
   
-  // 保存倾诉记录
   async saveConfession(confession: Omit<Confession, 'id'>): Promise<Confession> {
     const record: Confession = {
       ...confession,
       id: this.generateId(),
+      userId: this.userId,
     };
     
-    const records = await this.getItem<Confession[]>(STORAGE_KEYS.CONFESSIONS) || [];
+    const key = getKey(BASE_KEYS.CONFESSIONS, this.userId);
+    const records = await this.getItem<Confession[]>(key) || [];
     records.unshift(record);
-    await this.setItem(STORAGE_KEYS.CONFESSIONS, records);
+    await this.setItem(key, records);
     
     return record;
   }
 
-  // 获取倾诉记录
   async getConfessions(): Promise<Confession[]> {
-    return await this.getItem<Confession[]>(STORAGE_KEYS.CONFESSIONS) || [];
+    const key = getKey(BASE_KEYS.CONFESSIONS, this.userId);
+    return await this.getItem<Confession[]>(key) || [];
   }
 
   // ========== 树洞相关 ==========
 
-  // 发布树洞
   async postToTreeHole(text: string): Promise<TreeHolePost> {
     const post: TreeHolePost = {
       id: this.generateId(),
       text,
       timestamp: Date.now(),
       likes: 0,
+      userId: this.userId,
     };
     
-    const posts = await this.getItem<TreeHolePost[]>(STORAGE_KEYS.TREEHOLE) || [];
+    const key = getKey(BASE_KEYS.TREEHOLE, this.userId);
+    const posts = await this.getItem<TreeHolePost[]>(key) || [];
     posts.unshift(post);
-    await this.setItem(STORAGE_KEYS.TREEHOLE, posts);
+    await this.setItem(key, posts);
     
     return post;
   }
 
-  // 获取树洞列表
   async getTreeHolePosts(): Promise<TreeHolePost[]> {
-    return await this.getItem<TreeHolePost[]>(STORAGE_KEYS.TREEHOLE) || [];
+    const key = getKey(BASE_KEYS.TREEHOLE, this.userId);
+    return await this.getItem<TreeHolePost[]>(key) || [];
   }
 
   // ========== 时光机相关 ==========
 
-  // 添加时光记录
   async addTimeMachineEntry(entry: Omit<TimeMachineEntry, 'id'>): Promise<TimeMachineEntry> {
     const record: TimeMachineEntry = {
       ...entry,
       id: this.generateId(),
+      userId: this.userId,
     };
     
-    const records = await this.getItem<TimeMachineEntry[]>(STORAGE_KEYS.TIMEMACHINE) || [];
+    const key = getKey(BASE_KEYS.TIMEMACHINE, this.userId);
+    const records = await this.getItem<TimeMachineEntry[]>(key) || [];
     records.unshift(record);
-    await this.setItem(STORAGE_KEYS.TIMEMACHINE, records);
+    await this.setItem(key, records);
     
     return record;
   }
 
-  // 获取时光记录
   async getTimeMachineEntries(): Promise<TimeMachineEntry[]> {
-    return await this.getItem<TimeMachineEntry[]>(STORAGE_KEYS.TIMEMACHINE) || [];
+    const key = getKey(BASE_KEYS.TIMEMACHINE, this.userId);
+    return await this.getItem<TimeMachineEntry[]>(key) || [];
   }
 
   // ========== AI对话相关 ==========
 
-  // 保存对话消息
   async addChatMessage(message: Omit<ChatMessage, 'id'>): Promise<ChatMessage> {
     const msg: ChatMessage = {
       ...message,
       id: this.generateId(),
     };
     
-    const messages = await this.getItem<ChatMessage[]>(STORAGE_KEYS.CHAT_HISTORY) || [];
+    const key = getKey(BASE_KEYS.CHAT_HISTORY, this.userId);
+    const messages = await this.getItem<ChatMessage[]>(key) || [];
     messages.push(msg);
-    await this.setItem(STORAGE_KEYS.CHAT_HISTORY, messages);
+    await this.setItem(key, messages);
     
     return msg;
   }
 
-  // 获取对话历史
   async getChatHistory(): Promise<ChatMessage[]> {
-    return await this.getItem<ChatMessage[]>(STORAGE_KEYS.CHAT_HISTORY) || [];
+    const key = getKey(BASE_KEYS.CHAT_HISTORY, this.userId);
+    return await this.getItem<ChatMessage[]>(key) || [];
   }
 
-  // 清空对话历史
   async clearChatHistory(): Promise<void> {
-    await this.setItem(STORAGE_KEYS.CHAT_HISTORY, []);
+    const key = getKey(BASE_KEYS.CHAT_HISTORY, this.userId);
+    await this.setItem(key, []);
   }
 
   // ========== 草稿缓存 ==========
 
-  // 保存树洞草稿
   async saveTreeHoleDraft(text: string): Promise<void> {
-    await this.setItem(STORAGE_KEYS.DRAFT_TREEHOLE, { text, timestamp: Date.now() });
+    const key = getKey(BASE_KEYS.DRAFT_TREEHOLE, this.userId);
+    await this.setItem(key, { text, timestamp: Date.now() });
   }
 
-  // 读取树洞草稿
   async getTreeHoleDraft(): Promise<{ text: string; timestamp: number } | null> {
-    return await this.getItem(STORAGE_KEYS.DRAFT_TREEHOLE);
+    const key = getKey(BASE_KEYS.DRAFT_TREEHOLE, this.userId);
+    return await this.getItem(key);
   }
   
-  // 清空树洞草稿
   async clearTreeHoleDraft(): Promise<void> {
+    const key = getKey(BASE_KEYS.DRAFT_TREEHOLE, this.userId);
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_TREEHOLE);
+      await AsyncStorage.removeItem(key);
     } catch (error) {
       console.error('Error clearing treehole draft:', error);
     }
   }
 
-  // 保存倾诉草稿
   async saveConfessionDraft(text: string, mode: string): Promise<void> {
-    await this.setItem(STORAGE_KEYS.DRAFT_CONFESSION, { text, mode, timestamp: Date.now() });
+    const key = getKey(BASE_KEYS.DRAFT_CONFESSION, this.userId);
+    await this.setItem(key, { text, mode, timestamp: Date.now() });
   }
 
-  // 读取倾诉草稿
   async getConfessionDraft(): Promise<{ text: string; mode: string; timestamp: number } | null> {
-    return await this.getItem(STORAGE_KEYS.DRAFT_CONFESSION);
+    const key = getKey(BASE_KEYS.DRAFT_CONFESSION, this.userId);
+    return await this.getItem(key);
   }
   
-  // 清空倾诉草稿（发送后调用）
   async clearConfessionDraft(): Promise<void> {
+    const key = getKey(BASE_KEYS.DRAFT_CONFESSION, this.userId);
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_CONFESSION);
+      await AsyncStorage.removeItem(key);
     } catch (error) {
       console.error('Error clearing confession draft:', error);
     }
   }
 
-  // 保存时光机草稿
   async saveTimeMachineDraft(text: string, mood: string | null): Promise<void> {
-    await this.setItem(STORAGE_KEYS.DRAFT_TIMEMACHINE, { text, mood, timestamp: Date.now() });
+    const key = getKey(BASE_KEYS.DRAFT_TIMEMACHINE, this.userId);
+    await this.setItem(key, { text, mood, timestamp: Date.now() });
   }
 
-  // 读取时光机草稿
   async getTimeMachineDraft(): Promise<{ text: string; mood: string | null; timestamp: number } | null> {
-    return await this.getItem(STORAGE_KEYS.DRAFT_TIMEMACHINE);
+    const key = getKey(BASE_KEYS.DRAFT_TIMEMACHINE, this.userId);
+    return await this.getItem(key);
   }
   
-  // 清空时光机草稿
   async clearTimeMachineDraft(): Promise<void> {
+    const key = getKey(BASE_KEYS.DRAFT_TIMEMACHINE, this.userId);
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.DRAFT_TIMEMACHINE);
+      await AsyncStorage.removeItem(key);
     } catch (error) {
       console.error('Error clearing timemachine draft:', error);
     }
@@ -238,27 +253,24 @@ class StorageService {
   
   // ========== 对话历史存储 ==========
   
-  // 保存对话历史（用户可回查）- 支持更新已有记录
   async saveChatHistory(record: ChatHistoryRecord): Promise<void> {
     try {
-      let history = await this.getChatHistoryList();
-      // 如果已存在相同 sessionId，先移除（更新）
+      const key = getKey(BASE_KEYS.CHAT_HISTORY, this.userId);
+      let history = await this.getItem<ChatHistoryRecord[]>(key) || [];
       history = history.filter(h => h.sessionId !== record.sessionId);
-      history.unshift(record); // 最新在前
-      // 保留最近50条
+      history.unshift({ ...record, userId: this.userId });
       const trimmed = history.slice(0, 50);
-      await this.setItem(STORAGE_KEYS.CHAT_HISTORY, trimmed);
+      await this.setItem(key, trimmed);
     } catch (error) {
       console.error('Error saving chat history:', error);
     }
   }
   
-  // 获取对话历史列表
   async getChatHistoryList(): Promise<ChatHistoryRecord[]> {
-    return await this.getItem(STORAGE_KEYS.CHAT_HISTORY) || [];
+    const key = getKey(BASE_KEYS.CHAT_HISTORY, this.userId);
+    return await this.getItem(key) || [];
   }
   
-  // 获取单条对话详情
   async getChatHistory(sessionId: string): Promise<ChatHistoryRecord | null> {
     const history = await this.getChatHistoryList();
     return history.find(h => h.sessionId === sessionId) || null;
