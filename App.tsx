@@ -7,6 +7,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import TreeHoleScreen from './src/screens/TreeHoleScreen';
 import TimeMachineScreen from './src/screens/TimeMachineScreen';
+import SplashScreen from './src/screens/SplashScreen';
 import TabBar from './src/components/TabBar';
 import CenterMenu from './src/components/CenterMenu';
 import { useTheme } from './src/hooks/useTheme';
@@ -21,8 +22,14 @@ export default function App() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [userId, setUserId] = useState<string>('guest');
   const [userInfo, setUserInfo] = useState<any>({ nickname: '游客', stats: { confessionCount: 0, treeholeCount: 0, timeMachineCount: 0, continuousDays: 0 } });
+  const [splashVisible, setSplashVisible] = useState(true);
   
   const { mode: themeMode, setMode: setThemeMode, isDark, colors } = useTheme();
+
+  // 启动屏完成
+  const handleSplashComplete = useCallback(() => {
+    setSplashVisible(false);
+  }, []);
 
   // 用户初始化（获取 CloudBase 用户后创建/获取资料）
   const initUserProfile = useCallback(async (uid: string) => {
@@ -143,6 +150,7 @@ export default function App() {
         </View>
       )}
       <CenterMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onSelect={handleMenuSelect} />
+      <SplashScreen visible={splashVisible} onComplete={handleSplashComplete} />
     </View>
   );
 }
