@@ -28,7 +28,11 @@ export default function App() {
 
   // 启动屏完成
   const handleSplashComplete = useCallback(() => {
-    setSplashVisible(false);
+    console.log('[App] 启动屏完成，等待动画完成后切换');
+    // 延迟关闭启动屏，确保淡出动画完成
+    setTimeout(() => {
+      setSplashVisible(false);
+    }, 2500); // 延迟关闭
   }, []);
 
   // 用户初始化（获取 CloudBase 用户后创建/获取资料）
@@ -150,7 +154,11 @@ export default function App() {
         </View>
       )}
       <CenterMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onSelect={handleMenuSelect} />
-      <SplashScreen visible={splashVisible} onComplete={handleSplashComplete} />
+      <SplashScreen 
+        visible={splashVisible} 
+        onComplete={handleSplashComplete} 
+        style={{ zIndex: 1000 }}  // 确保启动屏在最上层
+      />
     </View>
   );
 }
