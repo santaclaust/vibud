@@ -10,12 +10,15 @@ import TimeMachineScreen from './src/screens/TimeMachineScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import TabBar from './src/components/TabBar';
 import CenterMenu from './src/components/CenterMenu';
+import SproutPetSimple from './src/components/SproutPetSimple';
+import SproutPet3D from './src/components/SproutPet3D';
+import TemperamentTestScreen from './src/screens/TemperamentTestScreen';
 import { useTheme } from './src/hooks/useTheme';
 import notificationService from './src/services/NotificationService';
 import { initCloudBase, reinitCloudBase, saveUserProfile, getUserProfile, logout } from './src/services/CloudBaseService';
 import logger from './src/services/Logger';
 
-type ScreenName = 'Home' | 'Confession' | 'Message' | 'Profile' | 'Community' | 'TreeHole' | 'TimeMachine';
+type ScreenName = 'Home' | 'Confession' | 'Message' | 'Profile' | 'Community' | 'TreeHole' | 'TimeMachine' | 'TemperamentTest';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<ScreenName>('Home');
@@ -138,6 +141,14 @@ export default function App() {
         {currentRoute === 'Message' && <MessageScreen {...screenProps} />}
         {currentRoute === 'Profile' && <ProfileScreen {...screenProps} />}
         {currentRoute === 'Community' && <CommunityScreen {...screenProps} />}
+        {currentRoute === 'TemperamentTest' && (
+          <TemperamentTestScreen 
+            onComplete={(result) => {
+              console.log('测试结果:', result);
+            }}
+            onClose={() => setCurrentRoute('Profile')}
+          />
+        )}
       </>
     );
   };
@@ -157,8 +168,11 @@ export default function App() {
       <SplashScreen 
         visible={splashVisible} 
         onComplete={handleSplashComplete} 
-        style={{ zIndex: 1000 }}  // 确保启动屏在最上层
+        style={{ zIndex: 1000 }}
       />
+      {!splashVisible && currentRoute !== 'TemperamentTest' && (
+        <SproutPetSimple growLevel={1} mood="calm" />
+      )}
     </View>
   );
 }

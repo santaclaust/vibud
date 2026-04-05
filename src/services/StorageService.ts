@@ -12,6 +12,7 @@ const BASE_KEYS = {
   DRAFT_TREEHOLE: 'xinya_draft_treehole',
   DRAFT_CONFESSION: 'xinya_draft_confession',
   DRAFT_TIMEMACHINE: 'xinya_draft_timemachine',
+  TEMPERAMENT_RESULT: 'xinya_temperament_result',
 };
 
 // 倾诉记录类型
@@ -30,7 +31,27 @@ export interface TreeHolePost {
   text: string;
   timestamp: number;
   likes: number;
+  comments: number;
+  isLiked: boolean;
   userId?: string;
+}
+
+// 气质测试结果类型
+export interface TemperamentResult {
+  primaryType: string;
+  secondaryType: string;
+  resultType: string;
+  plant: string;
+  scores: {
+    bile: number;
+    blood: number;
+    slime: number;
+    depression: number;
+  };
+  completionRate?: number;
+  bonusPercent?: number;
+  baseScore?: number;
+  finalScore?: number;
 }
 
 // 时光机记录类型
@@ -72,6 +93,10 @@ class StorageService {
 
   setUserId(uid: string) {
     this.userId = uid;
+  }
+  
+  getUserId(): string {
+    return this.userId;
   }
 
   private async getItem<T>(key: string): Promise<T | null> {
@@ -249,6 +274,18 @@ class StorageService {
     } catch (error) {
       console.error('Error clearing timemachine draft:', error);
     }
+  }
+  
+  // ========== 气质测试结果存储 ==========
+  
+  async saveTemperamentResult(result: TemperamentResult): Promise<void> {
+    const key = getKey(BASE_KEYS.TEMPERAMENT_RESULT, this.userId);
+    await this.setItem(key, { ...result, savedAt: Date.now() });
+  }
+  
+  async getTemperamentResult(): Promise<(TemperamentResult & { savedAt: number }) | null> {
+    const key = getKey(BASE_KEYS.TEMPERAMENT_RESULT, this.userId);
+    return await this.getItem(key);
   }
   
   // ========== 对话历史存储 ==========

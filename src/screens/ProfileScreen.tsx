@@ -19,6 +19,7 @@ const menuItems = [
   { id: 'records', icon: '📝', name: '我的记录', arrow: '›' },
   { id: 'favorites', icon: '★', name: '收藏', arrow: '›' },
   { id: 'switchUser', icon: '🔄', name: '切换用户(测试)', arrow: '›' },
+  { id: 'temperament', icon: '🌱', name: '领取种子', arrow: '›' },
   { id: 'reports', icon: '🚩', name: '举报管理', arrow: '›', adminOnly: true },
   { id: 'adminStats', icon: '📊', name: 'AI效能监控', arrow: '›', adminOnly: true },
   { id: 'settings', icon: '⚙️', name: '设置', arrow: '›' },
@@ -133,6 +134,16 @@ export default function ProfileScreen({ navigation, colors: c, userId, userInfo,
     else if (itemId === 'favorites') { openFavorites(); }
     else if (itemId === 'reports') { openReports(); }
     else if (itemId === 'switchUser') { setShowSwitchUser(true); }
+    else if (itemId === 'temperament') { 
+      // 通过 navigation.navigate 切换到测试页面
+      const nav = navigation?.navigate;
+      if (nav) {
+        nav('TemperamentTest');
+      } else {
+        // 如果没有 navigation，通过全局事件或直接修改
+        console.log('跳转气质测试');
+      }
+    }
     else if (itemId === 'adminStats') { loadAnalytics(); }
   };
 
